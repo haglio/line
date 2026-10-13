@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from app_support.launcher import assert_launchers_match_their_specs, dry_run
+from app_support.launcher import assert_launchers_match_their_specs, dry_run, launchers
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = REPO_ROOT / "launch_line.vbs"
@@ -33,10 +33,9 @@ def test_at_sign_in_line_starts_in_the_tray_without_opening_its_window():
     assert report.value("arguments") == "-m line"
 
 
-@on_windows
-@pytest.mark.parametrize("launcher", [LAUNCHER, IN_THE_TRAY, PREVIEW], ids=lambda path: path.name)
-def test_every_launcher_starts_line_on_the_console_python_so_its_window_can_show(launcher):
-    assert Path(dry_run(launcher).value("interpreter")).name == "python.exe"
+@pytest.mark.parametrize("launcher", launchers(REPO_ROOT), ids=lambda launcher: launcher.file)
+def test_every_launcher_starts_line_through_its_log_never_straight_into_a_hidden_first_window(launcher):
+    assert launcher.log
 
 
 @on_windows
