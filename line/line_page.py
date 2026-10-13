@@ -146,11 +146,11 @@ def _tip(head: str, lines: list[str]) -> str:
 
 
 BARS_H = 30
-GUTTER_H = 30
+GUTTER_H = 36
 LANE_H = BARS_H + GUTTER_H
 RAN_H = 20
 WAITED_H = 8
-ICON_H = 22
+ICON_H = 26
 STEM_W = 1.2
 SHORTEST_BAR = 2
 SMALLEST_HIT = 10
@@ -274,25 +274,25 @@ class Icon:
 
 
 def _word_in_a_box(word: str) -> Icon:
-    width = 9 + 8.2 * len(word)
-    return Icon(width, (Box(width, 1.8, 4.5), Words("word", word, width / 2, 15.5)))
+    width = 12 + 9.6 * len(word)
+    return Icon(width, (Box(width, 2, 5), Words("word", word, width / 2, 18.5)))
 
 
 def _snowflake_in_a_slashed_circle() -> Icon:
-    middle, ring, arm, branch_at, branch, branch_angle = (ICON_H / 2, ICON_H / 2), ICON_H / 2 - 1.4, 6.2, 4.2, 2.4, 40
+    middle, ring, arm, branch_at, branch, branch_angle = (ICON_H / 2, ICON_H / 2), ICON_H / 2 - 1.6, 7.4, 5, 2.9, 40
 
     def point(angle: float, reach: float, start: Point = middle) -> Point:
         return start[0] + math.cos(math.radians(angle)) * reach, start[1] + math.sin(math.radians(angle)) * reach
 
-    arms = [Stick("flake", point(angle + 180, arm), point(angle, arm), 1.3) for angle in (90, 30, 150)]
+    arms = [Stick("flake", point(angle + 180, arm), point(angle, arm), 1.5) for angle in (90, 30, 150)]
     for angle in range(90, 450, 60):
         fork = point(angle, branch_at)
-        arms += [Stick("flake", fork, point(angle + side * branch_angle, branch, fork), 1.3) for side in (-1, 1)]
-    return Icon(ICON_H, (Ring(middle, ring, 2.2), *arms, Stick("slash", point(225, ring), point(45, ring), 2.2)))
+        arms += [Stick("flake", fork, point(angle + side * branch_angle, branch, fork), 1.5) for side in (-1, 1)]
+    return Icon(ICON_H, (Ring(middle, ring, 2.5), *arms, Stick("slash", point(225, ring), point(45, ring), 2.5)))
 
 
 def _mark(mark: str) -> Icon:
-    return Icon(14, (Words("mark", mark, 7, 17),))
+    return Icon(16, (Words("mark", mark, 8, 20.5),))
 
 
 ICONS = {ALL: _word_in_a_box("ALL"), SOME: _word_in_a_box("SOME"), NO_FLAKES: _snowflake_in_a_slashed_circle(),
@@ -452,8 +452,8 @@ main { max-width:1140px; margin:0 auto }
 .periods button[aria-pressed=true] { color:var(--ink); background:var(--pressed); font-weight:600 }
 .period { margin:0; overflow-x:auto } .period svg { display:block; width:100%; min-width:760px; height:auto }
 .grid { fill:var(--grid) } .now { fill:var(--ink) }
-.tick { fill:var(--muted); font-size:11px; text-anchor:middle } .lane { fill:var(--ink2); font-size:12px; text-anchor:end }
-.place { fill:var(--ink); font-size:12px; font-weight:600; text-anchor:end }
+.tick { fill:var(--muted); font-size:12px; text-anchor:middle } .lane { fill:var(--ink2); font-size:13px; text-anchor:end }
+.place { fill:var(--ink); font-size:13px; font-weight:600; text-anchor:end }
 .run .hit { fill:transparent } .run .waited { fill:var(--muted); opacity:.45 }
 .run.passed .ran { fill:var(--passed) } .run.failed .ran { fill:var(--failed) }
 .run.no-result .ran { fill:var(--noresult) } .run.going .ran { fill:var(--going) }
@@ -461,9 +461,9 @@ main { max-width:1140px; margin:0 auto }
 .icon.passed, .stem.passed { color:var(--passed) } .icon.failed, .stem.failed { color:var(--failed) }
 .icon.no-result, .stem.no-result { color:var(--noresult) } .icon.going, .stem.going { color:var(--going) }
 .icon.key-ink { color:var(--ink2) } .stem { fill:currentColor; opacity:.7 } .icon * { fill:currentColor }
-.icon .word { font-size:12px; font-weight:700; letter-spacing:.5px; text-anchor:middle }
-.icon .mark { font-size:17px; font-weight:800; text-anchor:middle }
-.legend, .kinds { display:flex; flex-wrap:wrap; gap:14px; color:var(--ink2); font-size:12px }
+.icon .word { font-size:14px; font-weight:700; letter-spacing:.5px; text-anchor:middle }
+.icon .mark { font-size:21px; font-weight:800; text-anchor:middle }
+.legend, .kinds { display:flex; flex-wrap:wrap; gap:14px; color:var(--ink2); font-size:13px }
 .kinds { flex-basis:100%; gap:8px 18px }
 .key { display:inline-flex; align-items:center; gap:6px }
 .swatch { display:inline-block; width:14px; height:8px; border-radius:3px }
