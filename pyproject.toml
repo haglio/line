@@ -43,6 +43,12 @@ venv = "primary"
 log = 'state\line_launcher.log'
 
 [tool.haglio.shortcuts."Line"]
+launcher = "launch_line.vbs"
+icon = "icon.ico"
+app-id = "Local.Line"
+places = ["taskbar", "checkout"]
+
+[tool.haglio.shortcuts."Line in the tray"]
 launcher = "launch_line_in_the_tray.vbs"
 icon = "icon.ico"
 app-id = "Local.Line"

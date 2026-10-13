@@ -26,5 +26,5 @@ From a worktree, run the primary checkout's `.venv` with the worktree as the wor
 
 - Through a pull request and the merge queue, as every Haglio repo: `gh pr create --fill --draft` as the preview goes out, `gh pr ready` on his word.
 - Then `python ~/.claude/tools/update_production.py <this repo's primary checkout>`. A running Line starts afresh from the files on disk the next time he opens it, so it needs no restart.
-- Launchers are rendered from `pyproject.toml` by `python -m app_support.launcher --write`; the shortcut that starts Line in the tray at sign-in is kept by `python -m app_support.windows_settings --write`.
+- Launchers are rendered from `pyproject.toml` by `python -m app_support.launcher --write`; the shortcuts are kept by `python -m app_support.windows_settings --write`: `Line.lnk` in this folder, which he pins to his taskbar and which opens Line's window, and the one that starts Line in the tray at sign-in.
 - Every fixture is invented: a session name, a branch, a path. Never one copied from his machine.
