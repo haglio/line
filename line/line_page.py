@@ -26,30 +26,28 @@ def who_of(branch: str) -> str:
 
 
 _TEST_FILE = re.compile(r"test_(\w+?)(?:_integration)?(?:\.py|\b)")
-REPEAT_CHANGED = "--repeat-changed"
-
-
-def describe(args: list[str]) -> str:
-    if REPEAT_CHANGED in args:
-        return "its new tests, over and over"
-    if "--changed" in args:
-        return "what its change needs"
-    named = [arg for arg in args if not arg.startswith("-")]
-    files = {match[1] for arg in named for match in _TEST_FILE.finditer(arg.split("::")[0])}
-    if not files:
-        return "the whole suite"
-    if len(files) == 1:
-        name = next(iter(files)).replace("_", " ")
-        return f'the "{name}" tests' if name.split()[0] in ("a", "an", "the") else f"the {name} tests"
-    return f"tests from {len(files)} files"
-
-
 ALL = "all"
 SOME = "some"
 NO_FLAKES = "no flakes"
 AGAIN = "again"
 MEASURING = "measuring"
+REPEAT_CHANGED = "--repeat-changed"
 WITHOUT_COVERAGE = "--no-cov"
+
+
+def describe(args: list[str], kind: str) -> str:
+    if kind == NO_FLAKES:
+        return "its new tests, over and over"
+    if kind == ALL:
+        return "the whole suite"
+    named = [arg for arg in args if not arg.startswith("-")]
+    files = {match[1] for arg in named for match in _TEST_FILE.finditer(arg.split("::")[0])}
+    if not files:
+        return "some tests"
+    if len(files) == 1:
+        name = next(iter(files)).replace("_", " ")
+        return f'the "{name}" tests' if name.split()[0] in ("a", "an", "the") else f"the {name} tests"
+    return f"tests from {len(files)} files"
 
 
 @dataclass(frozen=True)
@@ -110,9 +108,9 @@ def runs_from(records: Iterable[RunRecord],
             ended, exit_code = record.seen, None
         else:
             continue
-        who = VERIFIER if record.checkout == VERIFYING_MAIN else who_of(record.branch)
-        runs.append(Run(who, describe(record.what), record.joined, ended, exit_code, record.got_the_machine,
-                        record.checkout, record.session, record.short, kind_of(record)))
+        who, kind = VERIFIER if record.checkout == VERIFYING_MAIN else who_of(record.branch), kind_of(record)
+        runs.append(Run(who, describe(record.what, kind), record.joined, ended, exit_code, record.got_the_machine,
+                        record.checkout, record.session, record.short, kind))
     return sorted(runs, key=lambda run: run.joined)
 
 

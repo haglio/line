@@ -34,15 +34,20 @@ def none_going(_record: RunRecord) -> bool:
 
 
 def test_what_a_run_asked_for_is_said_in_words():
-    assert line_page.describe([]) == "the whole suite"
-    assert line_page.describe(["--changed"]) == "what its change needs"
-    assert line_page.describe(["--repeat-changed", "origin/main"]) == "its new tests, over and over"
-    assert line_page.describe(["-k", "test_branch_session_integration"]) == "the branch session tests"
-    assert line_page.describe(["-k", "test_a_player_dies_at_startup_integration"]) == (
+    some = line_page.SOME
+    assert line_page.describe(["-x"], line_page.ALL) == "the whole suite"
+    assert line_page.describe(["--repeat-changed", "origin/main"], line_page.NO_FLAKES) == (
+        "its new tests, over and over")
+    assert line_page.describe(["-k", "test_branch_session_integration"], some) == "the branch session tests"
+    assert line_page.describe(["-k", "test_a_player_dies_at_startup_integration"], some) == (
         'the "a player dies at startup" tests')
-    assert line_page.describe(["-k", "test_quit_integration or test_crown_integration"]) == "tests from 2 files"
+    assert line_page.describe(["-k", "test_quit_integration or test_crown_integration"], some) == "tests from 2 files"
     assert line_page.describe(["tests/integration/test_crown_integration.py",
-                                   "tests/integration/test_quit_integration.py::test_a_quit"]) == "tests from 2 files"
+                               "tests/integration/test_quit_integration.py::test_a_quit"], some) == "tests from 2 files"
+
+
+def test_a_short_run_whose_words_name_no_test_file_is_some_tests_never_the_whole_suite():
+    assert line_page.describe(["-x", "-k", "hud"], line_page.SOME) == "some tests"
 
 
 def test_each_run_is_of_the_kind_its_record_says_it_ran():
@@ -227,7 +232,7 @@ def test_the_run_holding_the_machine_is_first_in_line_from_what_it_wrote_down_al
 
 def test_the_line_is_the_holder_first_then_short_runs_then_full_ones_each_in_the_order_they_joined():
     runs = line_page.runs_from([
-        record("claude/crown-colors-1a2b3c", joined=0, what=["--changed"]),
+        record("claude/crown-colors-1a2b3c", joined=0, what=["-x"]),
         record("claude/quit-faster", joined=5, what=["-k", "test_quit_integration"], short=True),
         record("HEAD", joined=7, checkout="verifying-main", got_the_machine=minute(9)),
         record("claude/hud-corner", joined=12, what=["-k", "test_hud_integration"], short=True),
@@ -240,7 +245,7 @@ def test_the_line_is_the_holder_first_then_short_runs_then_full_ones_each_in_the
         ("main verifier", "the whole suite", True),
         ("quit faster", "the quit tests", False),
         ("hud corner", "the hud tests", False),
-        ("crown colors", "what its change needs", False),
+        ("crown colors", "the whole suite", False),
     ]
 
 
