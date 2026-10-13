@@ -24,6 +24,14 @@ def test_each_shortcut_carries_the_identity_the_app_claims():
     assert {spec["app-id"] for spec in LISTED["shortcuts"].values()} == {TASKBAR_IDENTITY}
 
 
+def _places_and_launcher(shortcut: str) -> tuple[list[str], str]:
+    listed = LISTED["shortcuts"][shortcut]
+    return listed["places"], listed["launcher"]
+
+
 def test_line_starts_in_the_tray_when_he_signs_in():
-    assert (LISTED["shortcuts"]["Line"]["places"], LISTED["shortcuts"]["Line"]["launcher"]) == (
-        ["startup"], "launch_line_in_the_tray.vbs")
+    assert _places_and_launcher("Line in the tray") == (["startup"], "launch_line_in_the_tray.vbs")
+
+
+def test_the_shortcut_he_pins_to_the_taskbar_from_lines_folder_opens_its_window():
+    assert _places_and_launcher("Line") == (["taskbar", "checkout"], "launch_line.vbs")
