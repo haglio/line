@@ -1,71 +1,18 @@
 from __future__ import annotations
 
 import argparse
-import ast
-import ctypes
 import html
 import json
 import os
 import re
 import sys
-from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator
-from ctypes import wintypes
-from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 
-import psutil
-
-RUNNER = "tests.integration.hidden_desktop"
-SESSION_VARIABLE = "CLAUDE_CODE_SESSION_ID"
-_MODULE_RUN = re.compile(r"-m\s+" + re.escape(RUNNER) + r"(?P<args>[^;&|<>\n\"')]*)")
-_RUNPY_ARGV = re.compile(r"sys\.argv\s*=\s*(?P<argv>\[[^\]]*\])")
-
-
-def runner_invocations(command: str) -> list[list[str]]:
-    found = [(match.start(), [arg.strip("\"'") for arg in match["args"].split()])
-             for match in _MODULE_RUN.finditer(command)]
-    for match in _RUNPY_ARGV.finditer(command):
-        if RUNNER in command[match.end():]:
-            try:
-                argv = ast.literal_eval(match["argv"])
-            except (ValueError, SyntaxError):
-                continue
-            found.append((match.start(), [str(arg) for arg in argv[1:]]))
-    return [args for _, args in sorted(found)]
-
-
-_WAITED = re.compile(r"another integration run holds .*?\((\d+)s elapsed\)")
-_SUMMARY = re.compile(r"^=*\s*(?P<counts>\d+ \w+.*?) in (?P<seconds>[\d.]+)s\b", re.MULTILINE)
-_COUNT = re.compile(r"(\d+) (passed|failed|errors?)\b")
-
-
-@dataclass(frozen=True)
-class Outcome:
-    waited_s: float | None = None
-    ran_s: float | None = None
-    passed: int = 0
-    failed: int = 0
-
-    @property
-    def verdict(self) -> str:
-        if self.ran_s is None:
-            return "no result"
-        return "failed" if self.failed else "passed"
-
-
-def read_output(text: str) -> Outcome:
-    waits = [int(seconds) for seconds in _WAITED.findall(text)]
-    summaries = list(_SUMMARY.finditer(text))
-    if not summaries:
-        return Outcome(waited_s=max(waits, default=None))
-    last = summaries[-1]
-    counts = {kind: int(number) for number, kind in _COUNT.findall(last["counts"])}
-    failed = counts.get("failed", 0) + counts.get("error", 0) + counts.get("errors", 0)
-    return Outcome(waited_s=max(waits, default=None), ran_s=float(last["seconds"]),
-                   passed=counts.get("passed", 0), failed=failed)
-
+from app_support import haglio_settings, integration_runs, siblings
+from app_support.integration_runs import RunRecord
 
 _SESSION_SUFFIX = re.compile(r"-[0-9a-f]{6}$")
 
@@ -101,182 +48,56 @@ class Run:
     what: str
     joined: datetime
     ended: datetime | None = None
-    outcome: Outcome = field(default_factory=Outcome)
     exit_code: int | None = None
     got_the_machine: datetime | None = None
     checkout: str = ""
     session: str = ""
+    short: bool = False
+
+    @property
+    def holding(self) -> bool:
+        return self.ended is None and self.got_the_machine is not None
 
     def waited_s(self, now: datetime) -> float:
         return ((self.got_the_machine or self.ended or now) - self.joined).total_seconds()
 
     def ran_s(self, now: datetime) -> float | None:
-        if self.outcome.ran_s is not None:
-            return self.outcome.ran_s
         return ((self.ended or now) - self.got_the_machine).total_seconds() if self.got_the_machine else None
 
     @property
     def verdict(self) -> str:
         if self.ended is None:
             return "going"
-        if self.outcome.ran_s is not None:
-            return self.outcome.verdict
         if self.exit_code is None or self.got_the_machine is None:
             return "no result"
         return "passed" if self.exit_code == 0 else "failed"
 
 
-@dataclass(frozen=True)
-class Process:
-    pid: int
-    parent: int
-    command: str
-    started: float
-    cwd: str | None
-    session: str | None = None
+VERIFIER = "main verifier"
+VERIFYING_MAIN = "verifying-main"
 
 
-@dataclass(frozen=True)
-class InLine:
-    who: str
-    what: str
-    since: datetime
-    short: bool
-    got_the_machine: datetime | None = None
-    checkout: str = ""
-    session: str = ""
-
-    @property
-    def holding(self) -> bool:
-        return self.got_the_machine is not None
-
-    def as_run(self) -> Run:
-        return Run(self.who, self.what, self.since, got_the_machine=self.got_the_machine, checkout=self.checkout,
-                   session=self.session)
-
-
-def _goes_as_a_short_run(args: list[str]) -> bool:
-    if "--repeat-changed" in args:
-        return True
-    return "--changed" not in args and any(not arg.startswith("-") for arg in args)
-
-
-def _who_runs_from(cwd: str | None, branch_of: Callable[[str], str | None]) -> str:
-    if cwd and Path(cwd).name == "verifying-main":
-        return "main verifier"
-    return who_of((branch_of(cwd) if cwd else None) or "")
-
-
-def the_line_now(processes: Iterable[Process], branch_of: Callable[[str], str | None]) -> list[InLine]:
-    processes = list(processes)
-    children = defaultdict(list)
-    for process in processes:
-        children[process.parent].append(process)
-
-    def tests_started_under(pid: int) -> datetime | None:
-        waiting = list(children[pid])
-        while waiting:
-            child = waiting.pop()
-            if "pytest" in child.command and RUNNER not in child.command:
-                return datetime.fromtimestamp(child.started, UTC)
-            waiting.extend(children[child.pid])
-        return None
-
-    line = []
-    for process in processes:
-        if RUNNER not in process.command or any(RUNNER in child.command for child in children[process.pid]):
-            continue
-        args = next(iter(runner_invocations(process.command)), [])
-        got = tests_started_under(process.pid)
-        line.append(InLine(_who_runs_from(process.cwd, branch_of), describe(args),
-                           datetime.fromtimestamp(process.started, UTC), _goes_as_a_short_run(args), got,
-                           Path(process.cwd).name if process.cwd else "", process.session or ""))
-    return sorted(line, key=lambda entry: (not entry.holding, not entry.short, entry.since))
-
-
-class _ProcessEntry(ctypes.Structure):
-    _fields_ = [("size", wintypes.DWORD), ("usage", wintypes.DWORD), ("pid", wintypes.DWORD),
-                ("heap", ctypes.c_size_t), ("module", wintypes.DWORD), ("threads", wintypes.DWORD),
-                ("parent", wintypes.DWORD), ("priority", ctypes.c_long), ("flags", wintypes.DWORD),
-                ("exe", ctypes.c_wchar * 260)]
-
-
-def _pythons_and_their_parents() -> list[tuple[int, int]]:
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
-    snapshot = kernel32.CreateToolhelp32Snapshot(0x2, 0)
-    entry = _ProcessEntry(size=ctypes.sizeof(_ProcessEntry))
-    found = []
-    try:
-        more = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
-        while more:
-            if entry.exe.lower().startswith("python"):
-                found.append((entry.pid, entry.parent))
-            more = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
-    finally:
-        kernel32.CloseHandle(snapshot)
-    return found
-
-
-def _session_of(process: psutil.Process) -> str | None:
-    try:
-        return process.environ().get(SESSION_VARIABLE)
-    except (psutil.Error, OSError):
-        return None
-
-
-def processes_now() -> list[Process]:
-    found = []
-    for pid, parent in _pythons_and_their_parents():
-        try:
-            process = psutil.Process(pid)
-            command = " ".join(process.cmdline())
-            runner = RUNNER in command
-            found.append(Process(pid, parent, command, process.create_time(), process.cwd() if runner else None,
-                                 _session_of(process) if runner else None))
-        except (psutil.Error, OSError):
-            continue
-    return found
-
-
-def branch_of(checkout: str) -> str | None:
-    marker = Path(checkout) / ".git"
-    try:
-        git_dir = Path(marker.read_text(encoding="utf-8").removeprefix("gitdir:").strip()) if marker.is_file() else marker
-        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    return head.removeprefix("ref: refs/heads/") if head.startswith("ref: ") else "HEAD"
-
-
-_COLLECTED = re.compile(r"collected (\d+) items?")
-_TESTS_STARTED = "test session starts"
-FEWEST_TESTS_IN_THE_WHOLE_SUITE = 100
-
-
-def _what_the_verifier_ran(text: str) -> str:
-    counts = [int(count) for count in _COLLECTED.findall(text)]
-    if not counts:
-        return "some tests" if "this short run waits" in text else "the whole suite"
-    if counts[-1] >= FEWEST_TESTS_IN_THE_WHOLE_SUITE:
-        return "the whole suite"
-    return "1 test" if counts[-1] == 1 else f"{counts[-1]} tests"
-
-
-def verifier_runs(runs_dir: Path) -> list[Run]:
+def runs_from(records: Iterable[RunRecord],
+              still_going: Callable[[RunRecord], bool] = integration_runs.still_going) -> list[Run]:
     runs = []
-    for path in sorted(runs_dir.glob("*.txt")):
-        try:
-            joined = datetime.strptime(path.name[:15], "%Y%m%d-%H%M%S").astimezone()
-            text = path.read_text(encoding="utf-8", errors="replace")
-            last_written = datetime.fromtimestamp(path.stat().st_mtime).astimezone()
-        except (ValueError, OSError):
+    for record in records:
+        if record.ended is not None:
+            ended, exit_code = record.ended, record.exit_code
+        elif still_going(record):
+            ended, exit_code = None, None
+        elif record.seen is not None:
+            ended, exit_code = record.seen, None
+        else:
             continue
-        outcome = read_output(text)
-        got = joined + timedelta(seconds=outcome.waited_s or 0) if _TESTS_STARTED in text else None
-        runs.append(Run("main verifier", _what_the_verifier_ran(text), joined, last_written, outcome,
-                        got_the_machine=got, checkout="verifying-main"))
-    return runs
+        who = VERIFIER if record.checkout == VERIFYING_MAIN else who_of(record.branch)
+        runs.append(Run(who, describe(record.what), record.joined, ended, exit_code, record.got_the_machine,
+                        record.checkout, record.session, record.short))
+    return sorted(runs, key=lambda run: run.joined)
+
+
+def the_line(runs: Iterable[Run]) -> list[Run]:
+    return sorted((run for run in runs if run.ended is None),
+                  key=lambda run: (not run.holding, not run.short, run.joined))
 
 
 VERDICT_WORDS = {"going": "Still going", "passed": "Passed", "failed": "Failed", "no result": "No result"}
@@ -317,19 +138,18 @@ SHOWN_FIRST_H = 4
 GRID_EVERY_MIN = {1: 10, 4: 30, 12: 60, 24: 60}
 LABEL_EVERY_MIN = {1: 10, 4: 60, 12: 120, 24: 180}
 APP_NAME = "Line"
-VERIFIER = "main verifier"
 VERIFIER_ROW = "MAIN VERIFIER"
 ROW_NOTES = {VERIFIER_ROW: "Runs the whole integration suite on each change that ships to main. Production Fun Time "
                            "moves to a change only once that run passes."}
 
 
-def row_name(run: Run | InLine, names: dict[str, str]) -> str:
+def row_name(run: Run, names: dict[str, str]) -> str:
     if run.who == VERIFIER:
         return VERIFIER_ROW
     return names.get(run.session) or names.get(run.checkout) or run.who
 
 
-def rows_in_line_order(runs: list[Run], line: list[InLine], now: datetime, names: dict[str, str]) -> list[str]:
+def rows_in_line_order(runs: list[Run], line: list[Run], now: datetime, names: dict[str, str]) -> list[str]:
     in_line = list(dict.fromkeys(row_name(entry, names) for entry in line))
     last_seen: dict[str, datetime] = {}
     for run in runs:
@@ -395,8 +215,7 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         hit_left = left - max(0.0, SMALLEST_HIT - (right - left)) / 2
         split = min(right, x(run.got_the_machine)) if run.got_the_machine else right
         ran = run.ran_s(now)
-        counts = f" — {run.outcome.passed} passed, {run.outcome.failed} failed" if run.outcome.ran_s else ""
-        tip = _tip(VERDICT_WORDS[run.verdict] + counts, [
+        tip = _tip(VERDICT_WORDS[run.verdict], [
             row_of[id(run)], run.what,
             f"Joined {_clock(run.joined, now)}, ended {_clock(end, now) if run.ended else 'now'}",
             f"Waited {_span(run.waited_s(now))}, ran "
@@ -414,7 +233,7 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
             f"aria-label='Integration runs in the last {_hours_words(hours)}'>{''.join(parts)}</svg>")
 
 
-def _charts_with_their_legend_and_periods(runs: list[Run], line: list[InLine], now: datetime,
+def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now: datetime,
                                           names: dict[str, str]) -> str:
     rows = Rows(rows_in_line_order(runs, line, now, names),
                 {row: place for place, row in enumerate(dict.fromkeys(row_name(entry, names) for entry in line),
@@ -500,7 +319,7 @@ if (reloadEvery) setInterval(() => { if (tip.style.display !== 'block') location
 """
 
 
-def render(line: list[InLine], runs: list[Run], now: datetime, refresh_s: int | None = None,
+def render(line: list[Run], runs: list[Run], now: datetime, refresh_s: int | None = None,
            names: dict[str, str] | None = None) -> str:
     refresh = f" data-refresh={refresh_s}" if refresh_s else ""
     return (f"<!doctype html><html lang=en><head><meta charset=utf-8>"
@@ -510,52 +329,6 @@ def render(line: list[InLine], runs: list[Run], now: datetime, refresh_s: int | 
             f"<div id=tip></div><script>{SCRIPT}</script></body></html>")
 
 
-SAME_RUN = timedelta(minutes=1)
-
-
-def _record_time(record: dict, key: str) -> datetime | None:
-    return datetime.fromisoformat(record[key]) if record.get(key) else None
-
-
-def line_records(records_dir: Path, alive: Callable[[int], bool] = psutil.pid_exists) -> list[Run]:
-    runs = []
-    for path in records_dir.glob("*.json"):
-        try:
-            record = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        joined, got, ended = (_record_time(record, key) for key in ("joined", "got_the_machine", "ended"))
-        if ended is None and not alive(record.get("pid", 0)):
-            continue
-        who = "main verifier" if record.get("checkout") == "verifying-main" else who_of(record.get("branch", ""))
-        runs.append(Run(who, describe(record.get("what", [])), joined, ended, exit_code=record.get("exit_code"),
-                        got_the_machine=got, checkout=record.get("checkout", ""), session=record.get("session", "")))
-    return sorted(runs, key=lambda run: run.joined)
-
-
-def merged_runs(recorded: list[Run], read_elsewhere: list[Run]) -> list[Run]:
-    def recorded_already(run: Run) -> bool:
-        return any(run.who == mine.who and abs(run.joined - mine.joined) <= SAME_RUN for mine in recorded)
-
-    return [*recorded, *(run for run in read_elsewhere if not recorded_already(run))]
-
-
-def timeline_runs(runs: list[Run], line: list[InLine]) -> list[Run]:
-    unmatched = list(line)
-    kept = []
-    for run in sorted(runs, key=lambda run: run.joined):
-        same = [entry for entry in unmatched if entry.who == run.who and abs(entry.since - run.joined) <= SAME_RUN]
-        match = min(same, key=lambda entry: abs(entry.since - run.joined), default=None)
-        if match is not None and run.verdict in ("going", "no result"):
-            unmatched.remove(match)
-            kept.append(replace(run, ended=None, got_the_machine=run.got_the_machine or match.got_the_machine))
-        elif run.ended is not None:
-            kept.append(run)
-    kept.extend(entry.as_run() for entry in unmatched)
-    return sorted(kept, key=lambda run: run.joined)
-
-
-FUN_TIME = Path.home() / "workspace" / "haglio" / "fun_time"
 PROJECTS = Path.home() / ".claude" / "projects"
 _TRANSCRIPT_TAIL = 1 << 18
 
@@ -597,18 +370,21 @@ def session_names(projects: Path, worktrees: Path, checkouts: Iterable[str], ses
 WATCH_EVERY_S = 30
 
 
+def fun_time() -> Path:
+    return siblings.project_dir("fun_time", haglio_settings.project_roots())
+
+
 def write_the_page(page: Path, days: int, refresh_s: int | None) -> None:
     now = datetime.now().astimezone()
-    line = the_line_now(processes_now(), branch_of)
     since = now - timedelta(days=days)
-    recorded = [run for run in line_records(FUN_TIME / "state" / "integration_runs") if (run.ended or now) >= since]
-    verified = [run for run in verifier_runs(FUN_TIME / "state" / "main_verifier_runs") if (run.ended or now) >= since]
-    runs = timeline_runs(merged_runs(recorded, verified), line)
+    checkout = fun_time()
+    runs = [run for run in runs_from(integration_runs.read_runs(integration_runs.runs_dir(checkout)))
+            if (run.ended or now) >= since]
+    names = session_names(PROJECTS, checkout / ".claude" / "worktrees", [run.checkout for run in runs],
+                          [run.session for run in runs])
     page.parent.mkdir(parents=True, exist_ok=True)
     unfinished = page.with_suffix(".partial")
-    names = session_names(PROJECTS, FUN_TIME / ".claude" / "worktrees", [run.checkout for run in runs],
-                          [run.session for run in runs])
-    unfinished.write_text(render(line, runs, now, refresh_s, names), encoding="utf-8")
+    unfinished.write_text(render(the_line(runs), runs, now, refresh_s, names), encoding="utf-8")
     os.replace(unfinished, page)
 
 
