@@ -1,4 +1,5 @@
 import ctypes
+import logging
 import os
 import subprocess
 import sys
@@ -418,4 +419,87 @@ def test_waiting_for_a_copy_that_is_not_running_ends_at_once(offscreen_app):
 
     assert line_tray.wait_until_gone("line_tray_test_nobody_" + str(os.getpid()))
     assert time.monotonic() - started < AT_ONCE_S
+
+
+def _quitting(events: list[str], *, preview: bool) -> line_tray.Quitting:
+    return line_tray.Quitting(preview=preview, quit_line=lambda: events.append("quit"),
+                              hand_back=lambda: events.append("handed back"))
+
+
+def test_quit_from_the_tray_menu_is_written_down_and_quits_the_line_he_uses(caplog):
+    caplog.set_level(logging.INFO, logger="line")
+    events = []
+
+    _quitting(events, preview=False).from_the_tray_menu()
+
+    assert (caplog.messages, events) == (["asked to quit by the tray menu"], ["quit"])
+
+
+def test_a_preview_quit_from_its_tray_menu_hands_the_work_back_before_it_quits(caplog):
+    caplog.set_level(logging.INFO, logger="line")
+    events = []
+
+    _quitting(events, preview=True).from_the_tray_menu()
+
+    assert caplog.messages == ["asked to quit by the tray menu", "handing back to the Line he uses"]
+    assert events == ["handed back", "quit"]
+
+
+def test_a_copy_another_takes_over_from_says_so_and_quits_without_handing_anything_back(caplog):
+    caplog.set_level(logging.INFO, logger="line")
+    events = []
+
+    _quitting(events, preview=True).for_another_copy()
+
+    assert (caplog.messages, events) == (["another copy of Line took over"], ["quit"])
+
+
+def test_windows_announcing_the_end_of_his_session_is_written_down(offscreen_app, caplog):
+    caplog.set_level(logging.INFO, logger="line")
+
+    offscreen_app.commitDataRequest.emit(None)
+
+    assert caplog.messages == ["Windows announced that his session is ending"]
+
+
+AN_EXIT_CODE = 3
+
+
+def test_the_last_line_line_writes_gives_the_code_it_exits_with(caplog):
+    caplog.set_level(logging.INFO, logger="line")
+
+    assert line_tray.run_until_it_ends(lambda: AN_EXIT_CODE) == AN_EXIT_CODE
+    assert caplog.messages == [f"exiting with code {AN_EXIT_CODE}"]
+
+
+RUNS_LINE_AND_QUITS_IT_FROM_ITS_TRAY_MENU = """
+import sys
+from pathlib import Path
+from PyQt6.QtCore import QTimer
+from PyQt6.QtWidgets import QApplication, QMenu
+from line import line_tray
+copy = line_tray.LineCopy("Line", sys.argv[1], "Local.Line.Test", Path(sys.argv[2]), None)
+app = line_tray.application(["line_test"], copy)
+
+def quit_from_the_tray_menu():
+    [menu] = [widget for widget in QApplication.topLevelWidgets() if isinstance(widget, QMenu)]
+    [quit_item] = [action for action in menu.actions() if action.text() == "Quit"]
+    quit_item.trigger()
+
+QTimer.singleShot(0, quit_from_the_tray_menu)
+sys.exit(line_tray.run_the_tray(app, copy, open_now=False))
+"""
+
+
+def _what_line_wrote(state: Path) -> list[str]:
+    return [line.partition(": ")[2] for line in (state / "line.log").read_text(encoding="utf-8").splitlines()]
+
+
+def test_quit_from_the_tray_menu_is_the_last_thing_line_writes_before_its_exit_code(tmp_path):
+    subprocess.run([sys.executable, "-c", RUNS_LINE_AND_QUITS_IT_FROM_ITS_TRAY_MENU,
+                    "line_tray_test_menu_" + str(os.getpid()), str(tmp_path)],
+                   cwd=line_tray.CHECKOUT, env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, capture_output=True,
+                   timeout=60, check=False, creationflags=subprocess.CREATE_NO_WINDOW)
+
+    assert _what_line_wrote(tmp_path)[-2:] == ["asked to quit by the tray menu", "exiting with code 0"]
 
