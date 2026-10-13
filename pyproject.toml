@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "line"
+version = "0.1.0"
+description = "Fun Time's integration line in the tray: who holds the machine, who waits, and how each run ended"
+requires-python = ">=3.14"
+dependencies = [
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.195",
+    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.196",
+    "psutil>=7,<8",
+    "PyQt6>=6.10,<7",
+    "PyQt6-WebEngine>=6.10,<7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=9,<10", "pytest-cov>=7,<8", "pytest-timeout>=2.4,<3", "vulture>=2.16,<3", "ruff==0.16.6",
+       "pillow>=12,<13"]
+
+[tool.pytest.ini_options]
+addopts = "--timeout=120 --timeout-method=thread -p app_support.sanitize.pytest_plugin -p app_support.coverage_gate --cov --cov-report="
+testpaths = ["tests"]
+
+[tool.haglio]
+siblings = ["app_support", "shared_ui"]
+
+[tool.haglio.launchers."launch_line.vbs"]
+app = "Line"
+run = "-m line --open"
+log = 'state\line_launcher.log'
+
+[tool.haglio.launchers."launch_line_in_the_tray.vbs"]
+app = "Line"
+run = "-m line"
+log = 'state\line_launcher.log'
+
+[tool.haglio.launchers."launch_preview_branch.vbs"]
+app = "Line (branch preview)"
+run = "-m line --open"
+venv = "primary"
+log = 'state\line_launcher.log'
+
+[tool.haglio.shortcuts."Line"]
+launcher = "launch_line_in_the_tray.vbs"
+icon = "icon.ico"
+app-id = "Local.Line"
+places = ["startup"]
+
+[tool.setuptools.packages.find]
+include = ["line*"]
+namespaces = false

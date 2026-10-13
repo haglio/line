@@ -1,0 +1,23 @@
+# The family's merge gate, published once in haglio/.github; this file says only what
+# differs about this repo. The check the merge queue requires is `full-suite / suite`.
+name: merge gate (full suite)
+
+on:
+  pull_request:
+    branches: [main]
+  merge_group:
+  push:
+    branches: [main]
+
+concurrency:
+  group: merge-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-suite:
+    uses: haglio/.github/.github/workflows/merge-gate.yml@main
+    with:
+      siblings: ""
+      python-version: "3.14"
+      timeout-minutes: 15
+      qt-platform: offscreen
