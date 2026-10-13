@@ -3,11 +3,12 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import os
 import re
 import sys
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -25,10 +26,11 @@ def who_of(branch: str) -> str:
 
 
 _TEST_FILE = re.compile(r"test_(\w+?)(?:_integration)?(?:\.py|\b)")
+REPEAT_CHANGED = "--repeat-changed"
 
 
 def describe(args: list[str]) -> str:
-    if "--repeat-changed" in args:
+    if REPEAT_CHANGED in args:
         return "its new tests, over and over"
     if "--changed" in args:
         return "what its change needs"
@@ -42,6 +44,14 @@ def describe(args: list[str]) -> str:
     return f"tests from {len(files)} files"
 
 
+ALL = "all"
+SOME = "some"
+NO_FLAKES = "no flakes"
+AGAIN = "again"
+MEASURING = "measuring"
+WITHOUT_COVERAGE = "--no-cov"
+
+
 @dataclass(frozen=True)
 class Run:
     who: str
@@ -53,6 +63,7 @@ class Run:
     checkout: str = ""
     session: str = ""
     short: bool = False
+    kind: str = ALL
 
     @property
     def holding(self) -> bool:
@@ -77,6 +88,16 @@ VERIFIER = "main verifier"
 VERIFYING_MAIN = "verifying-main"
 
 
+def kind_of(record: RunRecord) -> str:
+    if record.what[:1] == [REPEAT_CHANGED]:
+        return NO_FLAKES
+    if not record.short:
+        return ALL
+    if record.checkout == VERIFYING_MAIN:
+        return MEASURING if WITHOUT_COVERAGE in record.what else AGAIN
+    return SOME
+
+
 def runs_from(records: Iterable[RunRecord],
               still_going: Callable[[RunRecord], bool] = integration_runs.still_going) -> list[Run]:
     runs = []
@@ -91,7 +112,7 @@ def runs_from(records: Iterable[RunRecord],
             continue
         who = VERIFIER if record.checkout == VERIFYING_MAIN else who_of(record.branch)
         runs.append(Run(who, describe(record.what), record.joined, ended, exit_code, record.got_the_machine,
-                        record.checkout, record.session, record.short))
+                        record.checkout, record.session, record.short, kind_of(record)))
     return sorted(runs, key=lambda run: run.joined)
 
 
@@ -126,13 +147,20 @@ def _tip(head: str, lines: list[str]) -> str:
     return _e("|".join([head, *lines]))
 
 
-LANE_H = 22
+BARS_H = 30
+GUTTER_H = 30
+LANE_H = BARS_H + GUTTER_H
+RAN_H = 20
+WAITED_H = 8
+ICON_H = 22
+STEM_W = 1.2
 SHORTEST_BAR = 2
 SMALLEST_HIT = 10
 PLACE_X = 20
 LABEL_W = 320
 LABEL_CHARS = 42
 CHART_W = 860
+RIGHT_MARGIN = 20
 PERIODS_H = (1, 4, 12, 24)
 SHOWN_FIRST_H = 4
 GRID_EVERY_MIN = {1: 10, 4: 30, 12: 60, 24: 60}
@@ -172,6 +200,159 @@ def _hours_words(hours: int) -> str:
     return "1 hour" if hours == 1 else f"{hours} hours"
 
 
+Point = tuple[float, float]
+
+
+@dataclass(frozen=True)
+class Stick:
+    name: str
+    start: Point
+    end: Point
+    thickness: float
+
+    def svg(self) -> str:
+        (x1, y1), (x2, y2) = self.start, self.end
+        length, middle_x, middle_y = math.dist(self.start, self.end) + self.thickness, (x1 + x2) / 2, (y1 + y2) / 2
+        return (f"<rect class={self.name} x={middle_x - length / 2:.2f} y={middle_y - self.thickness / 2:.2f} "
+                f"width={length:.2f} height={self.thickness} rx={self.thickness / 2} "
+                f"transform='rotate({math.degrees(math.atan2(y2 - y1, x2 - x1)):.1f} {middle_x:.2f} {middle_y:.2f})'>"
+                "</rect>")
+
+
+def _circle_path(middle: Point, radius: float) -> str:
+    (x, y), r = middle, radius
+    return f"M{x - r:.2f},{y:.2f}A{r:.2f},{r:.2f} 0 1 0 {x + r:.2f},{y:.2f}A{r:.2f},{r:.2f} 0 1 0 {x - r:.2f},{y:.2f}Z"
+
+
+@dataclass(frozen=True)
+class Ring:
+    middle: Point
+    radius: float
+    thickness: float
+
+    def svg(self) -> str:
+        return (f"<path class=ring fill-rule=evenodd d='{_circle_path(self.middle, self.radius + self.thickness / 2)}"
+                f"{_circle_path(self.middle, self.radius - self.thickness / 2)}'></path>")
+
+
+def _rounded_path(left: float, top: float, right: float, bottom: float, corner: float) -> str:
+    arc = f"A{corner},{corner} 0 0 1"
+    return (f"M{left + corner:.2f},{top:.2f}H{right - corner:.2f}{arc} {right:.2f},{top + corner:.2f}"
+            f"V{bottom - corner:.2f}{arc} {right - corner:.2f},{bottom:.2f}H{left + corner:.2f}{arc} {left:.2f},"
+            f"{bottom - corner:.2f}V{top + corner:.2f}{arc} {left + corner:.2f},{top:.2f}Z")
+
+
+@dataclass(frozen=True)
+class Box:
+    width: float
+    thickness: float
+    corner: float
+
+    def svg(self) -> str:
+        inner = self.thickness
+        return (f"<path class=box fill-rule=evenodd d='{_rounded_path(0, 0, self.width, ICON_H, self.corner)}"
+                f"{_rounded_path(inner, inner, self.width - inner, ICON_H - inner, self.corner - inner)}'></path>")
+
+
+@dataclass(frozen=True)
+class Words:
+    name: str
+    text: str
+    x: float
+    y: float
+
+    def svg(self) -> str:
+        return f"<text class={self.name} x={self.x:.1f} y={self.y}>{self.text}</text>"
+
+
+@dataclass(frozen=True)
+class Icon:
+    width: float
+    shapes: tuple[Stick | Ring | Box | Words, ...]
+
+    @property
+    def drawing(self) -> str:
+        return "".join(shape.svg() for shape in self.shapes)
+
+
+def _word_in_a_box(word: str) -> Icon:
+    width = 9 + 8.2 * len(word)
+    return Icon(width, (Box(width, 1.8, 4.5), Words("word", word, width / 2, 15.5)))
+
+
+def _snowflake_in_a_slashed_circle() -> Icon:
+    middle, ring, arm, branch_at, branch, branch_angle = (ICON_H / 2, ICON_H / 2), ICON_H / 2 - 1.4, 6.2, 4.2, 2.4, 40
+
+    def point(angle: float, reach: float, start: Point = middle) -> Point:
+        return start[0] + math.cos(math.radians(angle)) * reach, start[1] + math.sin(math.radians(angle)) * reach
+
+    arms = [Stick("flake", point(angle + 180, arm), point(angle, arm), 1.3) for angle in (90, 30, 150)]
+    for angle in range(90, 450, 60):
+        fork = point(angle, branch_at)
+        arms += [Stick("flake", fork, point(angle + side * branch_angle, branch, fork), 1.3) for side in (-1, 1)]
+    return Icon(ICON_H, (Ring(middle, ring, 2.2), *arms, Stick("slash", point(225, ring), point(45, ring), 2.2)))
+
+
+def _mark(mark: str) -> Icon:
+    return Icon(14, (Words("mark", mark, 7, 17),))
+
+
+ICONS = {ALL: _word_in_a_box("ALL"), SOME: _word_in_a_box("SOME"), NO_FLAKES: _snowflake_in_a_slashed_circle(),
+         AGAIN: _mark("!"), MEASURING: _mark("%")}
+ICON_GAP = 4
+KIND_WORDS = {ALL: "The whole suite", SOME: "Some of the tests", NO_FLAKES: "New tests, ten times each",
+              AGAIN: "Failed tests, run again", MEASURING: "Measuring which code each test file uses"}
+
+
+def icon_width(kind: str) -> float:
+    return ICONS[kind].width
+
+
+@dataclass(frozen=True)
+class GutterIcon:
+    anchor: float
+    kind: str
+    verdict: str
+    left: float = 0.0
+
+    @property
+    def width(self) -> float:
+        return icon_width(self.kind)
+
+
+def _one_icon_per_pile(icons: list[GutterIcon]) -> list[GutterIcon]:
+    piles: list[GutterIcon] = []
+    for icon in sorted(icons, key=lambda icon: icon.anchor):
+        pile = piles[-1] if piles else None
+        if pile and pile.kind == icon.kind and icon.anchor < pile.anchor + pile.width + ICON_GAP:
+            piles[-1] = replace(pile, verdict="failed" if "failed" in (pile.verdict, icon.verdict) else icon.verdict)
+        else:
+            piles.append(icon)
+    return piles
+
+
+def _spread_apart(icons: list[GutterIcon], right_edge: float) -> list[GutterIcon]:
+    placed: list[GutterIcon] = []
+    for icon in _one_icon_per_pile(icons):
+        after_the_last = placed[-1].left + placed[-1].width + ICON_GAP if placed else icon.anchor
+        placed.append(replace(icon, left=max(icon.anchor, after_the_last)))
+    pulled_in: list[GutterIcon] = []
+    for icon in reversed(placed):
+        pulled_in.append(replace(icon, left=min(icon.left, right_edge - icon.width)))
+        right_edge = pulled_in[-1].left - ICON_GAP
+    return pulled_in[::-1]
+
+
+def _gutter(top: float, icons: list[GutterIcon]) -> Iterator[str]:
+    bars_bottom, icon_top = top + BARS_H / 2 + RAN_H / 2, top + BARS_H + (GUTTER_H - ICON_H) / 2
+    for icon in _spread_apart(icons, LABEL_W + CHART_W + RIGHT_MARGIN):
+        verdict, half = icon.verdict.replace(" ", "-"), STEM_W / 2
+        yield (f"<polygon class='stem {verdict}' points='{icon.anchor - half:.1f},{bars_bottom} "
+               f"{icon.anchor + half:.1f},{bars_bottom} {icon.left + half:.1f},{icon_top} {icon.left - half:.1f},"
+               f"{icon_top}'></polygon><g class='icon {icon.kind.replace(' ', '-')} {verdict}' "
+               f"transform='translate({icon.left:.1f},{icon_top})'>{ICONS[icon.kind].drawing}</g>")
+
+
 @dataclass(frozen=True)
 class Rows:
     order: list[str]
@@ -201,15 +382,17 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         if (tick.hour * 60 + tick.minute) % LABEL_EVERY_MIN[hours] == 0:
             parts.append(f"<text class=tick x={x(tick):.1f} y=12>{tick.strftime('%H:%M')}</text>")
     for index, row in enumerate(lanes):
-        y = 30 + LANE_H * index
+        middle = 30 + LANE_H * index + BARS_H / 2
         if row in rows.places:
-            parts.append(f"<text class=place x={PLACE_X} y={y + 11}>{rows.places[row]}</text>")
+            parts.append(f"<text class=place x={PLACE_X} y={middle + 4.5}>{rows.places[row]}</text>")
         fitted = row if len(row) <= LABEL_CHARS else row[:LABEL_CHARS - 1].rstrip() + "…"
         note = ROW_NOTES.get(row) or (row if fitted != row else "")
         title = f"<title>{_e(note)}</title>" if note else ""
-        parts.append(f"<text class=lane x={LABEL_W - 10} y={y + 11}>{_e(fitted)}{title}</text>")
+        parts.append(f"<text class=lane x={LABEL_W - 10} y={middle + 4.5}>{_e(fitted)}{title}</text>")
+    icons_by_lane: dict[float, list[GutterIcon]] = {}
     for run in shown:
-        y = 30 + LANE_H * lanes.index(row_of[id(run)]) + 3
+        top = 30 + LANE_H * lanes.index(row_of[id(run)])
+        middle = top + BARS_H / 2
         end = run.ended or now
         left, right = x(run.joined), max(x(end), x(run.joined) + 3)
         hit_left = left - max(0.0, SMALLEST_HIT - (right - left)) / 2
@@ -221,15 +404,18 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
             f"Waited {_span(run.waited_s(now))}, ran "
             + (_span(ran) if ran is not None else "never" if run.ended else "not yet")])
         parts.append(f"<g class='run {run.verdict.replace(' ', '-')}' data-tip='{tip}'>"
-                     f"<rect class=hit x={hit_left:.1f} y={y - 3} width={max(right - left, SMALLEST_HIT):.1f} "
-                     f"height={LANE_H - 2}></rect>"
-                     + (f"<rect class=waited x={left:.1f} y={y + 3} width={split - left:.1f} height=4 rx=2></rect>"
-                        if split > left else "")
-                     + (f"<rect class=ran x={split:.1f} y={y} width={held_width(split, end):.1f} height=10 rx=3>"
-                        "</rect>" if run.got_the_machine else "")
+                     f"<rect class=hit x={hit_left:.1f} y={top} width={max(right - left, SMALLEST_HIT):.1f} "
+                     f"height={BARS_H}></rect>"
+                     + (f"<rect class=waited x={left:.1f} y={middle - WAITED_H / 2} width={split - left:.1f} "
+                        f"height={WAITED_H} rx={WAITED_H / 2}></rect>" if split > left else "")
+                     + (f"<rect class=ran x={split:.1f} y={middle - RAN_H / 2} width={held_width(split, end):.1f} "
+                        f"height={RAN_H} rx=5></rect>" if run.got_the_machine else "")
                      + "</g>")
+        icons_by_lane.setdefault(top, []).append(GutterIcon(split, run.kind, run.verdict))
+    for top, icons in icons_by_lane.items():
+        parts.extend(_gutter(top, icons))
     parts.append(f"<rect class=now x={x(now) - 0.75:.2f} y=16 width=1.5 height={height - 16}></rect>")
-    return (f"<svg viewBox='0 0 {LABEL_W + CHART_W + 20} {height + 6}' role=img "
+    return (f"<svg viewBox='0 0 {LABEL_W + CHART_W + RIGHT_MARGIN} {height + 6}' role=img "
             f"aria-label='Integration runs in the last {_hours_words(hours)}'>{''.join(parts)}</svg>")
 
 
@@ -245,8 +431,12 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
                      f"{_chart(runs, now, hours, rows)}</figure>" for hours in PERIODS_H)
     legend = "".join(f"<span class=key><span class='swatch {verdict.replace(' ', '-')}'></span>"
                      f"{VERDICT_MARKS[verdict]} {word}</span>" for verdict, word in VERDICT_WORDS.items())
+    kinds = "".join(f"<span class=key><svg viewBox='0 0 {icon_width(kind):.1f} {ICON_H}' "
+                    f"width={icon_width(kind):.1f} height={ICON_H}><g class='icon {kind.replace(' ', '-')} key-ink'>"
+                    f"{ICONS[kind].drawing}</g></svg>{words}</span>" for kind, words in KIND_WORDS.items())
     return (f"<div class=chart-head><div class=legend>{legend}<span class=key><span class='swatch waited-key'></span>"
-            f"Waiting in line</span></div><div class=periods>{buttons}</div></div>{charts}")
+            f"Waiting in line</span></div><div class=periods>{buttons}</div><div class=kinds>{kinds}</div></div>"
+            f"{charts}")
 
 
 DARK_BACKGROUND = "#0d0d0d"
@@ -262,7 +452,7 @@ main { max-width:1140px; margin:0 auto }
 .periods button { font:inherit; font-size:12px; color:var(--ink2); background:transparent; border:1px solid var(--border);
   border-radius:6px; padding:3px 9px; cursor:pointer }
 .periods button[aria-pressed=true] { color:var(--ink); background:var(--pressed); font-weight:600 }
-.period { margin:0; overflow-x:auto } svg { display:block; width:100%; min-width:760px; height:auto }
+.period { margin:0; overflow-x:auto } .period svg { display:block; width:100%; min-width:760px; height:auto }
 .grid { fill:var(--grid) } .now { fill:var(--ink) }
 .tick { fill:var(--muted); font-size:11px; text-anchor:middle } .lane { fill:var(--ink2); font-size:12px; text-anchor:end }
 .place { fill:var(--ink); font-size:12px; font-weight:600; text-anchor:end }
@@ -270,7 +460,13 @@ main { max-width:1140px; margin:0 auto }
 .run.passed .ran { fill:var(--passed) } .run.failed .ran { fill:var(--failed) }
 .run.no-result .ran { fill:var(--noresult) } .run.going .ran { fill:var(--going) }
 .run:hover .ran { opacity:.75 }
-.legend { display:flex; flex-wrap:wrap; gap:14px; color:var(--ink2); font-size:12px }
+.icon.passed, .stem.passed { color:var(--passed) } .icon.failed, .stem.failed { color:var(--failed) }
+.icon.no-result, .stem.no-result { color:var(--noresult) } .icon.going, .stem.going { color:var(--going) }
+.icon.key-ink { color:var(--ink2) } .stem { fill:currentColor; opacity:.7 } .icon * { fill:currentColor }
+.icon .word { font-size:12px; font-weight:700; letter-spacing:.5px; text-anchor:middle }
+.icon .mark { font-size:17px; font-weight:800; text-anchor:middle }
+.legend, .kinds { display:flex; flex-wrap:wrap; gap:14px; color:var(--ink2); font-size:12px }
+.kinds { flex-basis:100%; gap:8px 18px }
 .key { display:inline-flex; align-items:center; gap:6px }
 .swatch { display:inline-block; width:14px; height:8px; border-radius:3px }
 .swatch.passed { background:var(--passed) } .swatch.failed { background:var(--failed) }
