@@ -97,6 +97,7 @@ def application(argv: list[str], copy: LineCopy) -> QApplication:
         set_app_user_model_id(copy.app_user_model_id)
     app = QApplication([*argv[:1], *WEB_VIEW_ARGUMENTS])
     app.setQuitOnLastWindowClosed(False)
+    app.commitDataRequest.connect(lambda: _log.info("Windows announced that his session is ending"))
     return app
 
 
@@ -193,6 +194,29 @@ def start_a_fresh_copy(start: Callable[..., object] = subprocess.Popen) -> None:
     start([sys.executable, "-m", "line", "--open"], cwd=CHECKOUT, creationflags=subprocess.CREATE_NO_WINDOW)
 
 
+class Quitting:
+    def __init__(self, *, preview: bool, quit_line: Callable[[], object], hand_back: Callable[[], object]):
+        self._preview = preview
+        self._quit_line = quit_line
+        self._hand_back = hand_back
+
+    def from_the_tray_menu(self) -> None:
+        _log.info("asked to quit by the tray menu")
+        if self._preview:
+            self.and_hand_back()
+        else:
+            self._quit_line()
+
+    def for_another_copy(self) -> None:
+        _log.info("another copy of Line took over")
+        self._quit_line()
+
+    def and_hand_back(self) -> None:
+        _log.info("handing back to the Line he uses")
+        self._hand_back()
+        self._quit_line()
+
+
 class _PageWriter:
     def __init__(self, page: Path):
         self.page = page
@@ -271,10 +295,10 @@ def main(argv: list[str] | None = None) -> int:
     for name in copy.copies_it_replaces:
         if ask(name, b"quit"):
             wait_until_gone(name)
-    return _run_the_tray(app, copy, open_now=args.open)
+    return run_the_tray(app, copy, open_now=args.open)
 
 
-def _run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
+def run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
     copy.state.mkdir(parents=True, exist_ok=True)
     install_exception_logging(configure_logging("line", copy.log))
     writer = _PageWriter(copy.page)
@@ -305,23 +329,15 @@ def _run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
         _log.info("asked to open by %s", how)
         running.open()
 
-    def hand_back_and_quit() -> None:
-        _log.info("handing back to the Line he uses")
-        hand_back()
-        app.quit()
-
-    def quit_when_asked() -> None:
-        _log.info("another copy of Line took over")
-        app.quit()
-
-    leave = app.quit if copy.preview is None else hand_back_and_quit
-    server = serve_requests(copy.server_name, open_line=lambda: open_asked("a launch"), quit_line=quit_when_asked)
+    quitting = Quitting(preview=copy.preview is not None, quit_line=app.quit, hand_back=hand_back)
+    server = serve_requests(copy.server_name, open_line=lambda: open_asked("a launch"),
+                            quit_line=quitting.for_another_copy)
     tray = QSystemTrayIcon(copy.icon())
     tray.setToolTip(copy.title)
     menu = QMenu()
     menu.addAction("Open").triggered.connect(lambda: open_asked("the tray menu"))
     menu.addSeparator()
-    menu.addAction("Quit").triggered.connect(leave)
+    menu.addAction("Quit").triggered.connect(quitting.from_the_tray_menu)
     tray.setContextMenu(menu)
     tray.activated.connect(
         lambda reason: open_asked("a click on the tray icon")
@@ -330,7 +346,7 @@ def _run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
     handing_back = QTimer()
     if copy.preview is not None:
         handing_back.setSingleShot(True)
-        handing_back.timeout.connect(hand_back_and_quit)
+        handing_back.timeout.connect(quitting.and_hand_back)
         handing_back.start(HAND_BACK_AFTER_MINUTES * 60_000)
     timer = QTimer()
     timer.timeout.connect(window.refresh)
@@ -338,7 +354,13 @@ def _run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
     _log.info("started from %s", CHECKOUT)
     if open_now:
         show_the_window()
-    return app.exec()
+    return run_until_it_ends(app.exec)
+
+
+def run_until_it_ends(event_loop: Callable[[], int]) -> int:
+    code = event_loop()
+    _log.info("exiting with code %d", code)
+    return code
 
 
 if __name__ == "__main__":
