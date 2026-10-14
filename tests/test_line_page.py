@@ -34,7 +34,7 @@ def none_going(_record: RunRecord) -> bool:
 
 
 def test_what_a_run_asked_for_is_said_in_words():
-    some = line_page.SOME
+    some = line_page.NAMED
     assert line_page.describe(["-x"], line_page.ALL) == "the whole suite"
     assert line_page.describe(["--repeat-changed", "origin/main"], line_page.NO_FLAKES) == (
         "its new tests, over and over")
@@ -47,7 +47,7 @@ def test_what_a_run_asked_for_is_said_in_words():
 
 
 def test_a_short_run_whose_words_name_no_test_file_is_some_tests_never_the_whole_suite():
-    assert line_page.describe(["-x", "-k", "hud"], line_page.SOME) == "some tests"
+    assert line_page.describe(["-x", "-k", "hud"], line_page.NAMED) == "some tests"
 
 
 def test_each_run_is_of_the_kind_its_record_says_it_ran():
@@ -57,8 +57,10 @@ def test_each_run_is_of_the_kind_its_record_says_it_ran():
 
     verifier = {"branch": "HEAD", "checkout": "verifying-main", "short": True}
     assert kind(what=["-x"]) == line_page.ALL
-    assert kind(what=["-x", "-k", "hud"], short=True) == line_page.SOME
-    assert kind(what=["tests/integration/test_crown_integration.py"], short=True) == line_page.SOME
+    assert kind(what=["-x", "-k", "hud"], short=True) == line_page.NAMED
+    assert kind(what=["-x", "tests/integration/test_crown_integration.py"], short=True) == line_page.NAMED
+    assert kind(what=["--changed", "tests/integration/test_crown_integration.py"], short=True) == line_page.CHANGED
+    assert kind(what=["--changed"]) == line_page.ALL
     assert kind(what=["--repeat-changed", "origin/main"], short=True) == line_page.NO_FLAKES
     assert kind("HEAD", what=[], checkout="verifying-main") == line_page.ALL
     assert kind(what=["tests/integration/test_crown_integration.py::test_a_crown"], **verifier) == line_page.AGAIN
@@ -77,13 +79,13 @@ def _icons(chart: str) -> list[tuple[str, float, float]]:
 
 def test_a_runs_icon_sits_in_the_gutter_under_its_rows_bars_where_its_bar_starts():
     run = line_page.Run("crown colors", "the crown tests", minute(0), minute(20), exit_code=0,
-                        got_the_machine=minute(5), short=True, kind=line_page.SOME)
+                        got_the_machine=minute(5), short=True, kind=line_page.NAMED)
 
     chart = _chart(line_page.render([], [run], now=minute(60)), hours=4)
 
     [(bar_x, bar_y, bar_height)] = _bars(chart)
     [(kind, icon_x, icon_y)] = _icons(chart)
-    assert (kind, icon_x) == ("some", bar_x)
+    assert (kind, icon_x) == ("named", bar_x)
     assert icon_y >= bar_y + bar_height
 
 
@@ -97,11 +99,54 @@ def _one_run_of(kind: str) -> str:
     return _chart(line_page.render([], [run], now=minute(60)), hours=4)
 
 
-def test_the_whole_suites_icon_is_the_word_all_in_a_box():
-    icon = _icon(_one_run_of(line_page.ALL), "all")
+def _shapes(kind: str, shape: type) -> list:
+    return [each for each in line_page.ICONS[kind].shapes if isinstance(each, shape)]
 
-    assert "class=box" in icon
-    assert re.search(r"<text [^>]*>ALL</text>", icon)
+
+def _rows_of(cells: list) -> list[int]:
+    by_row: dict[float, int] = {}
+    for cell in cells:
+        by_row[cell.top] = by_row.get(cell.top, 0) + 1
+    return [by_row[top] for top in sorted(by_row)]
+
+
+def test_the_whole_suites_icon_is_a_square_box_packed_with_a_grid_of_little_squares():
+    [box] = _shapes(line_page.ALL, line_page.Box)
+    cells = _shapes(line_page.ALL, line_page.Cell)
+
+    assert box.width == line_page.ICON_H
+    rows = _rows_of(cells)
+    packed = 3
+    assert len(rows) >= packed
+    assert rows == [len(rows)] * len(rows)
+    assert all(box.thickness < cell.left and cell.left + cell.size < box.width - box.thickness for cell in cells)
+    assert "class=cell" in _icon(_one_run_of(line_page.ALL), "all")
+
+
+def _inside_the_ring(cell, ring) -> bool:
+    corners = [(cell.left + dx, cell.top + dy) for dx in (0, cell.size) for dy in (0, cell.size)]
+    return all(math.dist(corner, ring.middle) < ring.radius - ring.thickness / 2 for corner in corners)
+
+
+def test_the_tests_a_change_needs_wear_a_puzzle_piece_of_little_squares_in_a_circle_as_big_as_no_flakes():
+    [ring] = _shapes(line_page.CHANGED, line_page.Ring)
+    [no_flakes_ring] = _shapes(line_page.NO_FLAKES, line_page.Ring)
+    cells = _shapes(line_page.CHANGED, line_page.Cell)
+
+    assert (ring.middle, ring.radius) == (no_flakes_ring.middle, no_flakes_ring.radius)
+    assert _rows_of(cells) == [2, 5, 2]
+    assert all(_inside_the_ring(cell, ring) for cell in cells)
+
+
+def test_tests_by_name_wear_two_little_squares_side_by_side_in_that_circle():
+    [ring] = _shapes(line_page.NAMED, line_page.Ring)
+    [no_flakes_ring] = _shapes(line_page.NO_FLAKES, line_page.Ring)
+    cells = _shapes(line_page.NAMED, line_page.Cell)
+
+    assert (ring.middle, ring.radius) == (no_flakes_ring.middle, no_flakes_ring.radius)
+    assert _rows_of(cells) == [2]
+    assert all(_inside_the_ring(cell, ring) for cell in cells)
+    assert cells[1].left - cells[0].left > cells[0].size
 
 
 def test_the_new_tests_ten_times_icon_is_a_snowflake_in_a_slashed_circle_saying_no_flakes():
@@ -120,9 +165,29 @@ def test_the_new_tests_ten_times_icon_is_a_snowflake_in_a_slashed_circle_saying_
     assert "class=ring" in _icon(_one_run_of(line_page.NO_FLAKES), "no-flakes")
 
 
-def test_the_failed_tests_again_wear_an_exclamation_mark_and_measuring_a_percent_sign():
-    assert re.search(r"<text [^>]*>!</text>", _icon(_one_run_of(line_page.AGAIN), "again"))
-    assert re.search(r"<text [^>]*>%</text>", _icon(_one_run_of(line_page.MEASURING), "measuring"))
+def test_measuring_which_code_each_test_file_uses_wears_a_percent_sign_in_the_square_box_of_the_whole_suite():
+    [box] = _shapes(line_page.MEASURING, line_page.Box)
+    rings = _shapes(line_page.MEASURING, line_page.Ring)
+    [slash] = _shapes(line_page.MEASURING, line_page.Stick)
+
+    assert box == _shapes(line_page.ALL, line_page.Box)[0]
+    upper, lower = sorted(rings, key=lambda ring: ring.middle[1])
+    assert upper.middle[0] < lower.middle[0]
+    (low_x, low_y), (high_x, high_y) = sorted([slash.start, slash.end], key=lambda end: -end[1])
+    assert low_x < high_x
+    assert high_y < low_y
+
+
+def test_the_failed_tests_again_wear_an_exclamation_mark_in_a_warning_triangle():
+    [triangle] = _shapes(line_page.AGAIN, line_page.Triangle)
+    [bar] = _shapes(line_page.AGAIN, line_page.Stick)
+    [dot] = _shapes(line_page.AGAIN, line_page.Dot)
+
+    (point, left, right) = triangle.corners
+    assert point[1] < left[1] == right[1]
+    assert bar.start[0] == bar.end[0] == dot.middle[0] == point[0]
+    assert point[1] < bar.start[1] < bar.end[1] < dot.middle[1] < left[1]
+    assert "class=triangle" in _icon(_one_run_of(line_page.AGAIN), "again")
 
 
 def test_icons_of_runs_that_start_close_together_in_one_row_spread_apart_instead_of_overlapping():
@@ -191,7 +256,7 @@ def test_the_legend_shows_each_kinds_icon_beside_what_it_stands_for():
 
     keys = re.findall(r"<span class=key><svg [^>]*><g class='icon ([\w-]+) [^']*'.*?</svg>([^<]+)</span>",
                       re.search(r"<div class=kinds>(.*?)</div>", page)[1])
-    assert [kind for kind, _ in keys] == ["all", "some", "no-flakes", "again", "measuring"]
+    assert [kind for kind, _ in keys] == ["all", "changed", "named", "no-flakes", "again", "measuring"]
     assert all(words.strip() for _, words in keys)
 
 
@@ -409,7 +474,21 @@ def test_the_legend_and_the_period_buttons_share_one_row_above_the_chart_legend_
     page = line_page.render([], [], now=T0)
 
     assert re.search(r"<div class=chart-head><div class=legend>(?:(?!</div>).)*</div><div class=periods>"
-                     r"(?:(?!</div>).)*</div><div class=kinds>(?:(?!</div>).)*</div></div><figure ", page)
+                     r"(?:(?!</div>).)*</div><div class=kinds>(?:(?!</div>).)*</div></div>", page)
+
+
+def test_the_legend_buttons_and_times_stay_at_the_top_of_the_window_while_the_rows_scroll_under_them():
+    run = line_page.Run("crown colors", "the whole suite", minute(0), minute(20), exit_code=0, got_the_machine=minute(5))
+    page = line_page.render([], [run], now=minute(60))
+
+    frozen = re.search(r"<div class=frozen>(.*?)</div><figure ", page, re.DOTALL)[1]
+    assert "<div class=chart-head>" in frozen
+    times = re.findall(r"<div class='times period' data-hours=(\d+)( hidden)?><svg [^>]*>(.*?)</svg></div>", frozen)
+    assert [(hours, hidden) for hours, hidden, _ in times] == [("1", " hidden"), ("4", ""), ("12", " hidden"),
+                                                                ("24", " hidden")]
+    assert all("class=tick" in ticks for _, _, ticks in times if _ != " hidden")
+    assert "class=tick" not in _chart(page, hours=4)
+    assert re.search(r"\.frozen \{[^}]*position:sticky; top:0", line_page.STYLE)
 
 
 def test_the_page_reloads_itself_by_its_own_clock_rather_than_by_a_refresh_tag():
