@@ -326,8 +326,15 @@ def _square_packed_with_a_grid() -> Icon:
     return Icon(ICON_H, (SQUARE, *_cells([[0, 1, 2, 3]] * 4, 4, 3.2, 1.4)))
 
 
+PUZZLE_PIECE = _cells([[1, 3], [0, 1, 2, 3, 4], [1, 3]], 5, 3, 0.6)
+
+
 def _puzzle_piece_in_a_circle() -> Icon:
-    return Icon(ICON_H, (CIRCLE, *_cells([[1, 3], [0, 1, 2, 3, 4], [1, 3]], 5, 3, 0.6)))
+    return Icon(ICON_H, (CIRCLE, *PUZZLE_PIECE))
+
+
+def _puzzle_piece_in_a_square() -> Icon:
+    return Icon(ICON_H, (SQUARE, *PUZZLE_PIECE))
 
 
 def _two_squares_in_a_circle() -> Icon:
@@ -353,19 +360,20 @@ def _snowflake_in_a_slashed_circle() -> Icon:
     return Icon(ICON_H, (CIRCLE, *arms, Stick("slash", point(225, ring), point(45, ring), CIRCLE.thickness)))
 
 
-def _percent_sign_in_a_square() -> Icon:
-    near, far = ICON_H / 3, ICON_H * 2 / 3
-    return Icon(ICON_H, (SQUARE, Ring((near, near), 2.6, 1.7), Ring((far, far), 2.6, 1.7),
-                         Stick("slash", (near - 0.4, far + 1.2), (far + 0.4, near - 1.2), 1.9)))
-
-
 ICONS = {ALL: _square_packed_with_a_grid(), CHANGED: _puzzle_piece_in_a_circle(), NAMED: _two_squares_in_a_circle(),
          NO_FLAKES: _snowflake_in_a_slashed_circle(),
-         AGAIN: _exclamation_mark_in_a_warning_triangle(), MEASURING: _percent_sign_in_a_square()}
+         AGAIN: _exclamation_mark_in_a_warning_triangle(), MEASURING: _puzzle_piece_in_a_square()}
 ICON_GAP = 4
-KIND_WORDS = {ALL: "The whole suite", CHANGED: "Only all relevant tests", NAMED: "Specific tests",
-              NO_FLAKES: "Nondeterministic test prevention (run new tests 10x)", AGAIN: "Rerun failed tests",
-              MEASURING: "Coverage map"}
+KIND_WORDS = {ALL: "The whole suite", MEASURING: "Update relevance map", CHANGED: "Only all relevant tests",
+              NAMED: "Specific tests", NO_FLAKES: "Nondeterministic test prevention", AGAIN: "Rerun failed tests"}
+RELEVANCE = ["Relevance map",
+             ("Once a day the main verifier runs each test file by itself and notes which code it uses: "
+              "Update relevance map."),
+             "A branch's Only all relevant tests run then picks just the tests that use the code it changed."]
+KIND_TIPS = {MEASURING: RELEVANCE, CHANGED: RELEVANCE,
+             NO_FLAKES: ["Nondeterministic test prevention",
+                         ("Runs each new or changed test 10 times before its branch ships, so a test that only "
+                          "passes some of the time is caught first.")]}
 
 
 def icon_width(kind: str) -> float:
@@ -520,6 +528,10 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
             f"aria-label='Integration runs in the last {_hours_words(hours)}'>{dots}{''.join(parts)}</svg>")
 
 
+def _kind_tip(kind: str) -> str:
+    return f" data-tip='{_tip(KIND_TIPS[kind][0], KIND_TIPS[kind][1:])}'" if kind in KIND_TIPS else ""
+
+
 def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now: datetime, sessions: Sessions) -> str:
     names = sessions.names
     rows = Rows(rows_in_line_order(runs, line, now, names),
@@ -537,7 +549,7 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
                      "</figure>" for hours in PERIODS_H)
     legend = "".join(f"<span class=key><span class='swatch {verdict.replace(' ', '-')}'></span>"
                      f"{VERDICT_MARKS[verdict]} {word}</span>" for verdict, word in VERDICT_WORDS.items())
-    kinds = "".join(f"<span class=key><svg viewBox='0 0 {icon_width(kind):.1f} {ICON_H}' "
+    kinds = "".join(f"<span class=key{_kind_tip(kind)}><svg viewBox='0 0 {icon_width(kind):.1f} {ICON_H}' "
                     f"width={icon_width(kind):.1f} height={ICON_H}><g class='icon {kind.replace(' ', '-')} key-ink'>"
                     f"{ICONS[kind].drawing}</g></svg>{words}</span>" for kind, words in KIND_WORDS.items())
     return (f"<div class=frozen><div class=chart-head><div class=legend>{legend}<span class=key>"
@@ -549,7 +561,7 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
 
 DARK_BACKGROUND = "#0d0d0d"
 STYLE = f"""
-:root {{ --bg:{DARK_BACKGROUND}; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781; --grid:#2c2c2a;
+:root {{ --bg:{DARK_BACKGROUND}; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781; --waiting:#454441; --grid:#2c2c2a;
   --border:rgba(255,255,255,.10); --passed:#0ca30c; --failed:#d03b3b; --noresult:#f0c93d; --going:#3987e5;
   --pressed:#2c2c2a; color-scheme:dark }}
 """ + """
@@ -565,10 +577,10 @@ main { max-width:1140px; margin:0 auto }
 .grid { fill:var(--grid) } .now { fill:var(--ink) }
 .tick { fill:var(--muted); font-size:12px; text-anchor:middle } .lane { fill:var(--ink2); font-size:13px; text-anchor:end }
 .place { fill:var(--ink); font-size:13px; font-weight:600; text-anchor:end }
-.run .hit { fill:transparent } .run .waited { fill:var(--muted); opacity:.45 }
+.run .hit { fill:transparent } .run .waited { fill:var(--waiting) }
 .run.passed .ran { fill:var(--passed) } .run.failed .ran { fill:var(--failed) }
 .run.no-result .ran { fill:var(--noresult) } .run.going .ran { fill:var(--going) }
-.run:hover .ran { opacity:.75 }
+.run:hover .ran { filter:brightness(.8) }
 .icon.passed, .stem.passed { color:var(--passed) } .icon.failed, .stem.failed { color:var(--failed) }
 .icon.no-result, .stem.no-result { color:var(--noresult) } .icon.going, .stem.going { color:var(--going) }
 .icon.key-ink { color:var(--ink2) } .stem { fill:currentColor; opacity:.7 } .icon * { fill:currentColor }
@@ -578,17 +590,17 @@ main { max-width:1140px; margin:0 auto }
 .swatch { display:inline-block; width:14px; height:8px; border-radius:3px }
 .swatch.passed { background:var(--passed) } .swatch.failed { background:var(--failed) }
 .swatch.no-result { background:var(--noresult) } .swatch.going { background:var(--going) }
-.swatch.waited-key { background:var(--muted); opacity:.45; height:4px }
+.swatch.waited-key { background:var(--waiting); height:4px }
 .swatch.session-key { height:3px; background:radial-gradient(circle, var(--muted) 1.2px, transparent 1.4px) 0 0 / 6px 3px }
 pattern .dot { fill:var(--muted) }
-#tip { position:fixed; pointer-events:none; background:var(--surface); color:var(--ink); border:1px solid var(--border);
+#tip { position:fixed; z-index:2; pointer-events:none; background:var(--surface); color:var(--ink); border:1px solid var(--border);
   border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:0 4px 14px rgba(0,0,0,.15); display:none; max-width:320px }
 #tip strong { display:block; font-size:13px }
 """
 
 SCRIPT = """
 const tip = document.getElementById('tip');
-document.querySelectorAll('.run').forEach(run => {
+document.querySelectorAll('[data-tip]').forEach(run => {
   run.addEventListener('pointermove', event => {
     const [head, ...lines] = run.dataset.tip.split('|');
     tip.replaceChildren();
