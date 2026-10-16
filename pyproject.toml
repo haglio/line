@@ -8,8 +8,8 @@ version = "0.1.0"
 description = "Fun Time's integration line in the tray: who holds the machine, who waits, and how each run ended"
 requires-python = ">=3.14"
 dependencies = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.201",
-    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.200",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.221",
+    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.204",
     "PyQt6>=6.10,<7",
     "PyQt6-WebEngine>=6.10,<7",
 ]
@@ -24,6 +24,11 @@ testpaths = ["tests"]
 
 [tool.haglio]
 siblings = ["app_support", "shared_ui"]
+
+# Declared, so that every launcher here brings this checkout up to what has
+# shipped, and waits out an update of it already under way, before it starts
+# Line (app_support.production_update).
+[tool.haglio.production]
 
 [tool.haglio.launchers."launch_line.vbs"]
 app = "Line"
