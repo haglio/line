@@ -8,11 +8,12 @@ import os
 import re
 import sys
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app_support import haglio_settings, integration_runs, siblings
+from app_support.file_channel import write_whole
 from app_support.integration_runs import RunRecord
 
 _SESSION_SUFFIX = re.compile(r"-[0-9a-f]{6}$")
@@ -38,12 +39,9 @@ WITHOUT_COVERAGE = "--no-cov"
 
 
 def describe(args: list[str], kind: str) -> str:
-    if kind == NO_FLAKES:
-        return "its new tests, over and over"
-    if kind == ALL:
-        return "the whole suite"
-    if kind == CHANGED:
-        return "the tests its change needs"
+    if kind in (ALL, CHANGED, NO_FLAKES):
+        words = KIND_WORDS[kind]
+        return words[:1].lower() + words[1:]
     named = [arg for arg in args if not arg.startswith("-")]
     files = {match[1] for arg in named for match in _TEST_FILE.finditer(arg.split("::")[0])}
     if not files:
@@ -158,6 +156,8 @@ RAN_H = 20
 WAITED_H = 8
 ICON_H = 26
 STEM_W = 1.2
+SESSION_H = 2.4
+DOT_EVERY = 6
 SHORTEST_BAR = 2
 SMALLEST_HIT = 10
 PLACE_X = 20
@@ -363,9 +363,9 @@ ICONS = {ALL: _square_packed_with_a_grid(), CHANGED: _puzzle_piece_in_a_circle()
          NO_FLAKES: _snowflake_in_a_slashed_circle(),
          AGAIN: _exclamation_mark_in_a_warning_triangle(), MEASURING: _percent_sign_in_a_square()}
 ICON_GAP = 4
-KIND_WORDS = {ALL: "The whole suite", CHANGED: "The tests a change needs", NAMED: "Tests by name",
-              NO_FLAKES: "New tests, ten times each",
-              AGAIN: "Failed tests, run again", MEASURING: "Measuring which code each test file uses"}
+KIND_WORDS = {ALL: "The whole suite", CHANGED: "Only all relevant tests", NAMED: "Specific tests",
+              NO_FLAKES: "Nondeterministic test prevention (run new tests 10x)", AGAIN: "Rerun failed tests",
+              MEASURING: "Coverage map"}
 
 
 def icon_width(kind: str) -> float:
@@ -418,10 +418,26 @@ def _gutter(top: float, icons: list[GutterIcon]) -> Iterator[str]:
 
 
 @dataclass(frozen=True)
+class Lifetime:
+    spawned: datetime
+    archived: datetime | None
+
+
+@dataclass(frozen=True)
+class Sessions:
+    names: dict[str, str] = field(default_factory=dict)
+    lifetimes: dict[str, Lifetime] = field(default_factory=dict)
+
+    def lifetime_of(self, runs: Iterable[Run]) -> Lifetime | None:
+        return next((self.lifetimes[key] for run in runs for key in (run.session, run.checkout)
+                     if key in self.lifetimes), None)
+
+
+@dataclass(frozen=True)
 class Rows:
     order: list[str]
     places: dict[str, int]
-    names: dict[str, str]
+    sessions: Sessions
 
 
 def _across(now: datetime, hours: int) -> Callable[[datetime], float]:
@@ -444,7 +460,7 @@ def _times(now: datetime, hours: int) -> str:
 def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
     since = now - timedelta(hours=hours)
     shown = [run for run in runs if (run.ended or now) >= since]
-    row_of = {id(run): row_name(run, rows.names) for run in shown}
+    row_of = {id(run): row_name(run, rows.sessions.names) for run in shown}
     lanes = [row for row in rows.order if row in row_of.values()]
     height = CHART_TOP + LANE_H * len(lanes)
     x = _across(now, hours)
@@ -459,6 +475,13 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
              for tick in _ticks(since, now, GRID_EVERY_MIN[hours])]
     for index, row in enumerate(lanes):
         middle = CHART_TOP + LANE_H * index + BARS_H / 2
+        lifetime = rows.sessions.lifetime_of(run for run in shown if row_of[id(run)] == row)
+        if lifetime is not None:
+            start, end = x(lifetime.spawned), x(lifetime.archived or now)
+            ended = f"archived {_clock(lifetime.archived, now)}" if lifetime.archived else "still open"
+            parts.append(f"<rect class=session x={start:.1f} y={middle - SESSION_H / 2} width={end - start:.1f} "
+                         f"height={SESSION_H} fill='url(#dots-{hours})'><title>Session spawned "
+                         f"{_clock(lifetime.spawned, now)}, {ended}</title></rect>")
         if row in rows.places:
             parts.append(f"<text class=place x={PLACE_X} y={middle + 4.5}>{rows.places[row]}</text>")
         fitted = row if len(row) <= LABEL_CHARS else row[:LABEL_CHARS - 1].rstrip() + "…"
@@ -491,16 +514,18 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
     for top, icons in icons_by_lane.items():
         parts.extend(_gutter(top, icons))
     parts.append(f"<rect class=now x={x(now) - 0.75:.2f} y=0 width=1.5 height={height}></rect>")
+    dots = (f"<defs><pattern id=dots-{hours} width={DOT_EVERY} height={SESSION_H} patternUnits=userSpaceOnUse>"
+            f"<circle class=dot cx={DOT_EVERY / 2} cy={SESSION_H / 2} r={SESSION_H / 2}></circle></pattern></defs>")
     return (f"<svg viewBox='0 0 {LABEL_W + CHART_W + RIGHT_MARGIN} {height + 6}' role=img "
-            f"aria-label='Integration runs in the last {_hours_words(hours)}'>{''.join(parts)}</svg>")
+            f"aria-label='Integration runs in the last {_hours_words(hours)}'>{dots}{''.join(parts)}</svg>")
 
 
-def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now: datetime,
-                                          names: dict[str, str]) -> str:
+def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now: datetime, sessions: Sessions) -> str:
+    names = sessions.names
     rows = Rows(rows_in_line_order(runs, line, now, names),
                 {row: place for place, row in enumerate(dict.fromkeys(row_name(entry, names) for entry in line),
                                                         start=1)},
-                names)
+                sessions)
     buttons = "".join(f"<button type=button data-hours={hours} aria-pressed={str(hours == SHOWN_FIRST_H).lower()}>"
                       f"{hours} h</button>" for hours in PERIODS_H)
     def shown_first(hours: int) -> str:
@@ -516,7 +541,9 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
                     f"width={icon_width(kind):.1f} height={ICON_H}><g class='icon {kind.replace(' ', '-')} key-ink'>"
                     f"{ICONS[kind].drawing}</g></svg>{words}</span>" for kind, words in KIND_WORDS.items())
     return (f"<div class=frozen><div class=chart-head><div class=legend>{legend}<span class=key>"
-            f"<span class='swatch waited-key'></span>Waiting in line</span></div><div class=periods>{buttons}</div>"
+            f"<span class='swatch waited-key'></span>Waiting in line</span><span class=key>"
+            f"<span class='swatch session-key'></span>Session, spawned to archived</span></div>"
+            f"<div class=periods>{buttons}</div>"
             f"<div class=kinds>{kinds}</div></div>{times}</div>{charts}")
 
 
@@ -552,6 +579,8 @@ main { max-width:1140px; margin:0 auto }
 .swatch.passed { background:var(--passed) } .swatch.failed { background:var(--failed) }
 .swatch.no-result { background:var(--noresult) } .swatch.going { background:var(--going) }
 .swatch.waited-key { background:var(--muted); opacity:.45; height:4px }
+.swatch.session-key { height:3px; background:radial-gradient(circle, var(--muted) 1.2px, transparent 1.4px) 0 0 / 6px 3px }
+pattern .dot { fill:var(--muted) }
 #tip { position:fixed; pointer-events:none; background:var(--surface); color:var(--ink); border:1px solid var(--border);
   border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:0 4px 14px rgba(0,0,0,.15); display:none; max-width:320px }
 #tip strong { display:block; font-size:13px }
@@ -596,12 +625,12 @@ if (reloadEvery) setInterval(() => { if (tip.style.display !== 'block') location
 
 
 def render(line: list[Run], runs: list[Run], now: datetime, refresh_s: int | None = None,
-           names: dict[str, str] | None = None) -> str:
+           sessions: Sessions | None = None) -> str:
     refresh = f" data-refresh={refresh_s}" if refresh_s else ""
     return (f"<!doctype html><html lang=en><head><meta charset=utf-8>"
             f"<meta name=viewport content='width=device-width, initial-scale=1'>"
             f"<title>{APP_NAME}</title><style>{STYLE}</style></head><body{refresh}><main>"
-            f"{_charts_with_their_legend_and_periods(runs, line, now, names or {})}</main>"
+            f"{_charts_with_their_legend_and_periods(runs, line, now, sessions or Sessions())}</main>"
             f"<div id=tip></div><script>{SCRIPT}</script></body></html>")
 
 
@@ -643,6 +672,69 @@ def session_names(projects: Path, worktrees: Path, checkouts: Iterable[str], ses
     return names
 
 
+CLAUDE_APP_SESSIONS = (
+    (Path.home() / "AppData" / "Local" / "Packages",
+     "Claude_*/LocalCache/Roaming/Claude/claude-code-sessions/*/*/local_*.json"),
+    (Path.home() / "AppData" / "Roaming" / "Claude" / "claude-code-sessions", "*/*/local_*.json"),
+)
+
+
+@dataclass(frozen=True)
+class AppSession:
+    app_id: str
+    claude_code_ids: tuple[str, ...]
+    spawned: datetime
+    archived: bool
+    last_active: datetime
+
+
+def _from_ms(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000, UTC)
+
+
+def app_sessions(places: Iterable[tuple[Path, str]] = CLAUDE_APP_SESSIONS) -> list[AppSession]:
+    sessions: dict[str, AppSession] = {}
+    for root, pattern in places:
+        for path in root.glob(pattern):
+            try:
+                record = json.loads(path.read_text(encoding="utf-8"))
+                ids = tuple(filter(None, [record.get("cliSessionId"), *record.get("priorCliSessionIds", [])]))
+                session = AppSession(record["sessionId"], ids, _from_ms(record["createdAt"]),
+                                     bool(record.get("isArchived")), _from_ms(record["lastActivityAt"]))
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+            sessions.setdefault(session.app_id, session)
+    return list(sessions.values())
+
+
+SEEN_KEPT_FOR = timedelta(days=15)
+SEEN_SESSIONS = "sessions_seen.json"
+
+
+def archive_moments(seen: Path, sessions: list[AppSession], now: datetime) -> dict[str, datetime]:
+    try:
+        remembered = json.loads(seen.read_text(encoding="utf-8"))
+        was_open = set(remembered["open"])
+        moments = {app_id: datetime.fromisoformat(when) for app_id, when in remembered["archived"].items()}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        was_open, moments = set(), {}
+    for session in sessions:
+        if session.archived and session.app_id in was_open:
+            moments.setdefault(session.app_id, now)
+    moments = {app_id: when for app_id, when in moments.items() if when >= now - SEEN_KEPT_FOR}
+    write_whole(seen, json.dumps({"open": sorted(session.app_id for session in sessions if not session.archived),
+                                  "archived": {app_id: when.isoformat() for app_id, when in sorted(moments.items())}}))
+    return moments
+
+
+def lifetimes(sessions: list[AppSession], archived_at: dict[str, datetime]) -> dict[str, Lifetime]:
+    spans = {}
+    for session in sessions:
+        ended = archived_at.get(session.app_id, session.last_active) if session.archived else None
+        spans.update(dict.fromkeys(session.claude_code_ids, Lifetime(session.spawned, ended)))
+    return spans
+
+
 WATCH_EVERY_S = 30
 
 
@@ -659,8 +751,10 @@ def write_the_page(page: Path, days: int, refresh_s: int | None) -> None:
     names = session_names(PROJECTS, checkout / ".claude" / "worktrees", [run.checkout for run in runs],
                           [run.session for run in runs])
     page.parent.mkdir(parents=True, exist_ok=True)
+    sessions = app_sessions()
+    spans = lifetimes(sessions, archive_moments(page.parent / SEEN_SESSIONS, sessions, now))
     unfinished = page.with_suffix(".partial")
-    unfinished.write_text(render(the_line(runs), runs, now, refresh_s, names), encoding="utf-8")
+    unfinished.write_text(render(the_line(runs), runs, now, refresh_s, Sessions(names, spans)), encoding="utf-8")
     os.replace(unfinished, page)
 
 

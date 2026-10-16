@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from app_support.integration_runs import RunRecord, read_runs, write_run
 from app_support.win32 import process_started
 
@@ -37,7 +38,9 @@ def test_what_a_run_asked_for_is_said_in_words():
     some = line_page.NAMED
     assert line_page.describe(["-x"], line_page.ALL) == "the whole suite"
     assert line_page.describe(["--repeat-changed", "origin/main"], line_page.NO_FLAKES) == (
-        "its new tests, over and over")
+        "nondeterministic test prevention (run new tests 10x)")
+    assert line_page.describe(["--changed", "tests/integration/test_crown_integration.py"], line_page.CHANGED) == (
+        "only all relevant tests")
     assert line_page.describe(["-k", "test_branch_session_integration"], some) == "the branch session tests"
     assert line_page.describe(["-k", "test_a_player_dies_at_startup_integration"], some) == (
         'the "a player dies at startup" tests')
@@ -256,8 +259,115 @@ def test_the_legend_shows_each_kinds_icon_beside_what_it_stands_for():
 
     keys = re.findall(r"<span class=key><svg [^>]*><g class='icon ([\w-]+) [^']*'.*?</svg>([^<]+)</span>",
                       re.search(r"<div class=kinds>(.*?)</div>", page)[1])
-    assert [kind for kind, _ in keys] == ["all", "changed", "named", "no-flakes", "again", "measuring"]
-    assert all(words.strip() for _, words in keys)
+    assert keys == [("all", "The whole suite"), ("changed", "Only all relevant tests"), ("named", "Specific tests"),
+                    ("no-flakes", "Nondeterministic test prevention (run new tests 10x)"),
+                    ("again", "Rerun failed tests"), ("measuring", "Coverage map")]
+
+
+def _session_lines(chart: str) -> list[tuple[float, float]]:
+    return [(float(x), float(x) + float(width)) for x, width in
+            re.findall(r"<rect class=session x=([\d.]+) y=[\d.]+ width=([\d.]+) ", chart)]
+
+
+def test_a_rows_session_is_a_dotted_line_from_when_it_was_spawned_to_when_it_was_archived():
+    run = line_page.Run("crown colors", "the whole suite", minute(10), minute(20), exit_code=0,
+                        got_the_machine=minute(12), session="5e55-10n")
+    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(30))}
+
+    page = line_page.render([], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans))
+
+    whole_hour = _chart(page, hours=1)
+    [(start, end)] = _session_lines(whole_hour)
+    [(bar_x, _, _)] = _bars(whole_hour)
+    per_minute = line_page.CHART_W / 60
+    assert start == line_page.LABEL_W
+    assert end == pytest.approx(line_page.LABEL_W + 30 * per_minute, abs=0.1)
+    assert bar_x == pytest.approx(line_page.LABEL_W + 12 * per_minute, abs=0.1)
+
+
+def test_the_legend_says_the_dotted_line_is_the_session_from_spawned_to_archived_and_the_line_says_when():
+    run = line_page.Run("crown colors", "the whole suite", minute(10), minute(20), exit_code=0,
+                        got_the_machine=minute(12), session="5e55-10n")
+    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(30))}
+
+    page = line_page.render([], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans))
+
+    assert re.search(r"<span class=key><span class='swatch session-key'></span>Session, spawned to archived</span>",
+                     page)
+    when = re.search(r"<rect class=session [^>]*><title>([^<]*)</title></rect>", _chart(page, hours=1))[1]
+    assert when == f"Session spawned {line_page._clock(minute(0))}, archived {line_page._clock(minute(30))}"
+
+
+def test_an_open_sessions_dotted_line_runs_on_to_now():
+    run = line_page.Run("crown colors", "the whole suite", minute(10), session="5e55-10n")
+    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=None)}
+
+    whole_hour = _chart(line_page.render([run], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans)), hours=1)
+
+    [(_, end)] = _session_lines(whole_hour)
+    assert end == pytest.approx(line_page.LABEL_W + line_page.CHART_W, abs=0.1)
+
+
+def _app_session(folder: Path, app_id: str, **fields) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{app_id}.json").write_text(json.dumps({"sessionId": app_id, **fields}), encoding="utf-8")
+
+
+def _ms(when: datetime) -> int:
+    return int(when.timestamp() * 1000)
+
+
+def test_the_claude_apps_records_say_when_each_session_was_spawned_and_whether_it_is_archived(tmp_path):
+    account = tmp_path / "Claude_x" / "LocalCache" / "Roaming" / "Claude" / "claude-code-sessions" / "org" / "me"
+    _app_session(account, "local_one", cliSessionId="5e55-10n", priorCliSessionIds=["5e55-0ld"],
+                 createdAt=_ms(minute(0)), lastActivityAt=_ms(minute(40)), isArchived=True)
+    _app_session(account, "local_two", cliSessionId="0pen-5e5", createdAt=_ms(minute(5)),
+                 lastActivityAt=_ms(minute(50)), isArchived=False)
+    (account / "local_torn.json").write_text("{", encoding="utf-8")
+
+    sessions = sorted(line_page.app_sessions([(tmp_path, line_page.CLAUDE_APP_SESSIONS[0][1])]),
+                      key=lambda session: session.app_id)
+
+    assert sessions == [
+        line_page.AppSession("local_one", ("5e55-10n", "5e55-0ld"), minute(0), True, minute(40)),
+        line_page.AppSession("local_two", ("0pen-5e5",), minute(5), False, minute(50)),
+    ]
+
+
+def test_a_session_kept_in_two_places_is_read_from_the_first_place_the_app_keeps_sessions(tmp_path):
+    packaged, plain = tmp_path / "packaged" / "org" / "me", tmp_path / "plain" / "org" / "me"
+    _app_session(packaged, "local_one", cliSessionId="5e55-10n", createdAt=_ms(minute(0)),
+                 lastActivityAt=_ms(minute(40)), isArchived=True)
+    _app_session(plain, "local_one", cliSessionId="5e55-10n", createdAt=_ms(minute(0)),
+                 lastActivityAt=_ms(minute(10)), isArchived=False)
+
+    [session] = line_page.app_sessions([(tmp_path / "packaged", "*/*/local_*.json"),
+                                        (tmp_path / "plain", "*/*/local_*.json")])
+
+    assert (session.archived, session.last_active) == (True, minute(40))
+
+
+def test_line_writes_down_the_moment_it_first_sees_an_open_session_archived_and_keeps_that_moment(tmp_path):
+    seen = tmp_path / "sessions_seen.json"
+    still_open = line_page.AppSession("local_one", ("5e55-10n",), minute(0), False, minute(20))
+    archived = replace(still_open, archived=True, last_active=minute(25))
+
+    assert line_page.archive_moments(seen, [still_open], now=minute(30)) == {}
+    assert line_page.archive_moments(seen, [archived], now=minute(40)) == {"local_one": minute(40)}
+    assert line_page.archive_moments(seen, [archived], now=minute(50)) == {"local_one": minute(40)}
+
+
+def test_a_session_ends_where_line_saw_it_archived_or_at_its_last_activity_when_line_never_saw_it_open():
+    seen_archived = line_page.AppSession("local_one", ("5e55-10n", "5e55-0ld"), minute(0), True, minute(25))
+    archived_unseen = line_page.AppSession("local_two", ("0ld-5e55",), minute(5), True, minute(15))
+    still_open = line_page.AppSession("local_three", ("0pen-5e5",), minute(10), False, minute(55))
+
+    spans = line_page.lifetimes([seen_archived, archived_unseen, still_open], {"local_one": minute(40)})
+
+    assert spans == {"5e55-10n": line_page.Lifetime(minute(0), minute(40)),
+                     "5e55-0ld": line_page.Lifetime(minute(0), minute(40)),
+                     "0ld-5e55": line_page.Lifetime(minute(5), minute(15)),
+                     "0pen-5e5": line_page.Lifetime(minute(10), None)}
 
 
 def test_a_run_is_named_for_the_branch_that_asked_for_it():
@@ -402,7 +512,7 @@ def test_a_row_is_named_for_the_claude_session_that_ran_it():
                             got_the_machine=T0 + timedelta(minutes=1), checkout="quit-faster-1a2b3c")
     names = {"chart-crash-1f2e3d": "(agent) find why the chart redraws slowly"}
 
-    chart = _chart(line_page.render([], [named, unnamed], now=T0 + timedelta(hours=1), names=names), hours=4)
+    chart = _chart(line_page.render([], [named, unnamed], now=T0 + timedelta(hours=1), sessions=line_page.Sessions(names=names)), hours=4)
 
     assert sorted(_rows(chart)) == ["(agent) find why the chart redraws slowly", "quit faster"]
 
@@ -430,7 +540,7 @@ def test_a_run_in_line_is_named_for_the_session_that_started_it_whichever_worktr
     run = line_page.Run("fairer line", "the whole suite", T0, checkout="fairer-line", session="5e55-10n")
     names = {"5e55-10n": "steadier example runs", "fairer-line": "some other session"}
 
-    chart = _chart(line_page.render([run], [run], now=T0 + timedelta(minutes=5), names=names), hours=4)
+    chart = _chart(line_page.render([run], [run], now=T0 + timedelta(minutes=5), sessions=line_page.Sessions(names=names)), hours=4)
 
     assert _rows(chart) == ["steadier example runs"]
 
@@ -452,7 +562,7 @@ def test_a_long_row_name_is_shortened_to_fit_beside_its_number_and_shown_whole_w
     run = line_page.Run("crown colors", "the whole suite", T0, session="5e55-10n")
 
     chart = _chart(line_page.render([run], [run], now=T0 + timedelta(minutes=5),
-                                    names={"5e55-10n": long_name}), hours=4)
+                                    sessions=line_page.Sessions(names={"5e55-10n": long_name})), hours=4)
 
     shown, whole = re.search(r"<text class=lane [^>]*>([^<]*)<title>([^<]*)</title>", chart).groups()
     assert shown.endswith("…")
