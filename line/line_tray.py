@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import ctypes
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -12,6 +13,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from app_support import production_update
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.win32 import set_app_user_model_id
 from PyQt6.QtCore import Qt, QTimer, QUrl
@@ -37,6 +39,7 @@ TASKBAR_IDENTITY = "Local.Line"
 SERVER = "line_tray"
 PREVIEW_SERVER = "line_tray_preview"
 HAND_BACK_AFTER_MINUTES = 60
+UPDATE_CHECK_MS = 60_000
 _log = logging.getLogger("line")
 
 
@@ -192,6 +195,19 @@ def _contents(path: Path) -> bytes | None:
 
 def start_a_fresh_copy(start: Callable[..., object] = subprocess.Popen) -> None:
     start([sys.executable, "-m", "line", "--open"], cwd=CHECKOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+
+
+def watch_for_updates(copy: LineCopy, window: LineWindow, *,
+                      quit_this_copy: Callable[[], object]) -> production_update.UpdateWatch | None:
+    if copy.preview is not None:
+        return None
+
+    def start_again() -> None:
+        production_update.start_again_after(os.getpid(), CHECKOUT / "launch_line_in_the_tray.vbs")
+        quit_this_copy()
+
+    return production_update.UpdateWatch(CHECKOUT, a_good_moment=lambda: not window.is_showing,
+                                         start_again=start_again, logger=_log)
 
 
 class Quitting:
@@ -351,6 +367,10 @@ def run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
     timer = QTimer()
     timer.timeout.connect(window.refresh)
     timer.start(line_page.WATCH_EVERY_S * 1000)
+    looking_for_an_update = QTimer()
+    if (updates := watch_for_updates(copy, window, quit_this_copy=app.quit)) is not None:
+        looking_for_an_update.timeout.connect(updates.tick)
+        looking_for_an_update.start(UPDATE_CHECK_MS)
     _log.info("started from %s", CHECKOUT)
     if open_now:
         show_the_window()
