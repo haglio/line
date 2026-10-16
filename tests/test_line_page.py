@@ -295,17 +295,34 @@ def test_a_rows_session_is_a_dotted_line_from_when_it_was_spawned_to_when_it_was
     assert bar_x == pytest.approx(line_page.LABEL_W + 12 * per_minute, abs=0.1)
 
 
-def test_the_legend_says_the_dotted_line_is_the_session_from_spawned_to_archived_and_the_line_says_when():
+def _css_units(selector: str, attribute: str) -> float:
+    rule = re.search(rf"{re.escape(selector)} \{{([^}}]*)\}}", line_page.STYLE)[1]
+    return float(re.search(rf"(?:^|[ ;]){attribute}:calc\(([\d.]+) \* var\(--unit\)\)", rule)[1])
+
+
+def test_the_legend_names_the_dotted_line_session_shows_three_dots_or_more_and_says_spawned_to_archived_on_hover():
     run = line_page.Run("crown colors", "the whole suite", minute(10), minute(20), exit_code=0,
                         got_the_machine=minute(12), session="5e55-10n")
     spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(30))}
 
     page = line_page.render([], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans))
 
-    assert re.search(r"<span class=key><span class='swatch session-key'></span>Session, spawned to archived</span>",
-                     page)
+    tip = re.search(r"<span class=key data-tip='([^']*)'><span class='swatch session-key'></span>Session</span>", page)[1]
+    assert "spawned" in tip
+    assert "archived" in tip
+    dots = _css_units(".swatch.session-key", "width") / line_page.DOT_EVERY
+    assert dots >= len("...")
     when = re.search(r"<rect class=session [^>]*><title>([^<]*)</title></rect>", _chart(page, hours=1))[1]
     assert when == f"Session spawned {line_page._clock(minute(0))}, archived {line_page._clock(minute(30))}"
+
+
+def test_the_legends_bars_dots_and_icons_are_drawn_the_size_the_chart_draws_them():
+    assert _css_units(".swatch", "height") == line_page.RAN_H
+    assert _css_units(".swatch.waited-key", "height") == line_page.WAITED_H
+    assert _css_units(".swatch.session-key", "height") == line_page.SESSION_H
+    assert _css_units(".kinds svg", "height") == line_page.ICON_H
+    assert "--unit" in line_page.SCRIPT
+    assert "viewBox.baseVal.width" in line_page.SCRIPT
 
 
 def test_a_sessions_dots_pass_under_its_runs_bars_waiting_or_running_without_showing_through():
