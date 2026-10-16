@@ -9,6 +9,7 @@ from pathlib import Path
 
 import PyQt6
 import pytest
+from app_support import production_update
 from PyQt6.QtCore import QEvent, QLibraryInfo, Qt, QUrl
 from PyQt6.QtGui import QIcon
 from PyQt6.QtTest import QSignalSpy
@@ -203,6 +204,47 @@ def test_one_of_its_files_it_can_no_longer_read_counts_as_changed(tmp_path):
     running.open()
 
     assert events == ["stopped listening", "fresh copy started", "quit"]
+
+
+class _Window:
+    def __init__(self, *, showing):
+        self.is_showing = showing
+
+
+@pytest.fixture
+def an_update_waiting(monkeypatch):
+    events = []
+    monkeypatch.setattr(production_update, "UP_BEFORE_AN_UPDATE_S", 0.0)
+    monkeypatch.setattr(production_update, "waits_for_programs_to_close",
+                        lambda checkout: checkout == line_tray.CHECKOUT)
+    monkeypatch.setattr(production_update, "start_again_after",
+                        lambda pid, launcher: events.append((pid, launcher)))
+    return events
+
+
+def test_an_update_waiting_for_line_starts_it_again_in_the_tray_once_its_window_is_closed(an_update_waiting):
+    watch = line_tray.watch_for_updates(line_tray.this_copy(None), _Window(showing=False),
+                                        quit_this_copy=lambda: an_update_waiting.append("quit"))
+
+    watch.tick()
+
+    assert an_update_waiting == [(os.getpid(), line_tray.CHECKOUT / "launch_line_in_the_tray.vbs"), "quit"]
+
+
+def test_an_update_waits_while_lines_window_is_showing(an_update_waiting):
+    watch = line_tray.watch_for_updates(line_tray.this_copy(None), _Window(showing=True),
+                                        quit_this_copy=lambda: an_update_waiting.append("quit"))
+
+    watch.tick()
+
+    assert an_update_waiting == []
+
+
+def test_a_preview_keeps_no_watch_for_updates():
+    """It runs out of the everyday checkout's venv, and hands the work back within the hour."""
+    preview = line_tray.this_copy(Preview(feature="a new column"))
+
+    assert line_tray.watch_for_updates(preview, _Window(showing=False), quit_this_copy=lambda: None) is None
 
 
 def test_the_fresh_copy_runs_this_program_on_the_same_python_opening_its_window_with_no_console():
