@@ -497,6 +497,7 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         title = f"<title>{_e(note)}</title>" if note else ""
         parts.append(f"<text class=lane x={LABEL_W - 10} y={middle + 4.5}>{_e(fitted)}{title}</text>")
     icons_by_lane: dict[float, list[GutterIcon]] = {}
+    bars: list[str] = []
     for run in shown:
         top = CHART_TOP + LANE_H * lanes.index(row_of[id(run)])
         middle = top + BARS_H / 2
@@ -510,15 +511,17 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
             f"Joined {_clock(run.joined, now)}, ended {_clock(end, now) if run.ended else 'now'}",
             f"Waited {_span(run.waited_s(now))}, ran "
             + (_span(ran) if ran is not None else "never" if run.ended else "not yet")])
-        parts.append(f"<g class='run {run.verdict.replace(' ', '-')}' data-tip='{tip}'>"
-                     f"<rect class=hit x={hit_left:.1f} y={top} width={max(right - left, SMALLEST_HIT):.1f} "
+        group = f"<g class='run {run.verdict.replace(' ', '-')}' data-tip='{tip}'>"
+        parts.append(f"{group}<rect class=hit x={hit_left:.1f} y={top} width={max(right - left, SMALLEST_HIT):.1f} "
                      f"height={BARS_H}></rect>"
                      + (f"<rect class=waited x={left:.1f} y={middle - WAITED_H / 2} width={split - left:.1f} "
                         f"height={WAITED_H} rx={WAITED_H / 2}></rect>" if split > left else "")
-                     + (f"<rect class=ran x={split:.1f} y={middle - RAN_H / 2} width={held_width(split, end):.1f} "
-                        f"height={RAN_H} rx=5></rect>" if run.got_the_machine else "")
                      + "</g>")
+        if run.got_the_machine:
+            bars.append(f"{group}<rect class=ran x={split:.1f} y={middle - RAN_H / 2} "
+                        f"width={held_width(split, end):.1f} height={RAN_H} rx=5></rect></g>")
         icons_by_lane.setdefault(top, []).append(GutterIcon(split, run.kind, run.verdict))
+    parts.extend(bars)
     for top, icons in icons_by_lane.items():
         parts.extend(_gutter(top, icons))
     parts.append(f"<rect class=now x={x(now) - 0.75:.2f} y=0 width=1.5 height={height}></rect>")

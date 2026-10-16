@@ -321,6 +321,17 @@ def test_a_sessions_dots_pass_under_its_runs_bars_waiting_or_running_without_sho
     assert not any("opacity" in rule for rule in see_through)
 
 
+def test_a_second_run_waiting_while_the_first_runs_never_draws_its_gray_over_the_first_runs_bar():
+    running = line_page.Run("crown colors", "the whole suite", minute(0), minute(20), exit_code=0,
+                            got_the_machine=minute(5), session="5e55-10n")
+    waiting = line_page.Run("crown colors", "the whole suite", minute(10), minute(40), exit_code=0,
+                            got_the_machine=minute(20), session="5e55-10n")
+
+    chart = _chart(line_page.render([], [running, waiting], now=minute(60)), hours=1)
+
+    assert chart.rindex("<rect class=waited ") < chart.index("<rect class=ran ")
+
+
 def test_an_open_sessions_dotted_line_runs_on_to_now():
     run = line_page.Run("crown colors", "the whole suite", minute(10), session="5e55-10n")
     spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=None)}
@@ -424,8 +435,8 @@ def test_the_run_holding_the_machine_is_first_in_line_from_what_it_wrote_down_al
     in_line = [str(place) for place in range(1, len(waiting) + 2)]
     assert _rows(chart)[0] == "started through a script"
     assert _places(chart) == in_line
-    assert chart.count("class='run going'") == len(in_line)
-    assert len(re.findall(r"class='run going'[^>]*>(?:(?!</g>).)*class=ran", chart, re.DOTALL)) == 1
+    assert len(re.findall(r"<g class='run going' [^>]*><rect class=hit ", chart)) == len(in_line)
+    assert len(re.findall(r"<g class='run going' [^>]*><rect class=ran ", chart)) == 1
 
 
 def test_the_line_is_the_holder_first_then_short_runs_then_full_ones_each_in_the_order_they_joined():
