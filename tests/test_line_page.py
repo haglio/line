@@ -38,7 +38,7 @@ def test_what_a_run_asked_for_is_said_in_words():
     some = line_page.NAMED
     assert line_page.describe(["-x"], line_page.ALL) == "the whole suite"
     assert line_page.describe(["--repeat-changed", "origin/main"], line_page.NO_FLAKES) == (
-        "nondeterministic test prevention (run new tests 10x)")
+        "nondeterministic test prevention")
     assert line_page.describe(["--changed", "tests/integration/test_crown_integration.py"], line_page.CHANGED) == (
         "only all relevant tests")
     assert line_page.describe(["-k", "test_branch_session_integration"], some) == "the branch session tests"
@@ -168,17 +168,11 @@ def test_the_new_tests_ten_times_icon_is_a_snowflake_in_a_slashed_circle_saying_
     assert "class=ring" in _icon(_one_run_of(line_page.NO_FLAKES), "no-flakes")
 
 
-def test_measuring_which_code_each_test_file_uses_wears_a_percent_sign_in_the_square_box_of_the_whole_suite():
+def test_update_relevance_map_wears_the_relevant_tests_puzzle_piece_in_the_square_box_of_the_whole_suite():
     [box] = _shapes(line_page.MEASURING, line_page.Box)
-    rings = _shapes(line_page.MEASURING, line_page.Ring)
-    [slash] = _shapes(line_page.MEASURING, line_page.Stick)
 
     assert box == _shapes(line_page.ALL, line_page.Box)[0]
-    upper, lower = sorted(rings, key=lambda ring: ring.middle[1])
-    assert upper.middle[0] < lower.middle[0]
-    (low_x, low_y), (high_x, high_y) = sorted([slash.start, slash.end], key=lambda end: -end[1])
-    assert low_x < high_x
-    assert high_y < low_y
+    assert _shapes(line_page.MEASURING, line_page.Cell) == _shapes(line_page.CHANGED, line_page.Cell)
 
 
 def test_the_failed_tests_again_wear_an_exclamation_mark_in_a_warning_triangle():
@@ -257,11 +251,27 @@ def test_an_icon_and_its_line_wear_the_color_of_how_its_run_went():
 def test_the_legend_shows_each_kinds_icon_beside_what_it_stands_for():
     page = line_page.render([], [], now=T0)
 
-    keys = re.findall(r"<span class=key><svg [^>]*><g class='icon ([\w-]+) [^']*'.*?</svg>([^<]+)</span>",
+    keys = re.findall(r"<span class=key[^>]*><svg [^>]*><g class='icon ([\w-]+) [^']*'.*?</svg>([^<]+)</span>",
                       re.search(r"<div class=kinds>(.*?)</div>", page)[1])
-    assert keys == [("all", "The whole suite"), ("changed", "Only all relevant tests"), ("named", "Specific tests"),
-                    ("no-flakes", "Nondeterministic test prevention (run new tests 10x)"),
-                    ("again", "Rerun failed tests"), ("measuring", "Coverage map")]
+    assert keys == [("all", "The whole suite"), ("measuring", "Update relevance map"),
+                    ("changed", "Only all relevant tests"), ("named", "Specific tests"),
+                    ("no-flakes", "Nondeterministic test prevention"), ("again", "Rerun failed tests")]
+
+
+def test_the_relevance_map_and_its_relevant_tests_share_a_tooltip_and_the_ten_runs_moved_into_one():
+    page = line_page.render([], [], now=T0)
+
+    tips = {kind: tip for tip, kind in
+            re.findall(r"<span class=key data-tip='([^']*)'><svg [^>]*><g class='icon ([\w-]+) ", page)}
+    assert tips["measuring"] == tips["changed"]
+    assert "relevance map" in tips["changed"].lower()
+    assert "10" in tips["no-flakes"]
+    assert "[data-tip]" in line_page.SCRIPT
+
+    def layer(selector: str) -> int:
+        return int(re.search(rf"{re.escape(selector)} \{{[^}}]*z-index:(\d+)", line_page.STYLE)[1])
+
+    assert layer("#tip") > layer(".frozen")
 
 
 def _session_lines(chart: str) -> list[tuple[float, float]]:
@@ -296,6 +306,19 @@ def test_the_legend_says_the_dotted_line_is_the_session_from_spawned_to_archived
                      page)
     when = re.search(r"<rect class=session [^>]*><title>([^<]*)</title></rect>", _chart(page, hours=1))[1]
     assert when == f"Session spawned {line_page._clock(minute(0))}, archived {line_page._clock(minute(30))}"
+
+
+def test_a_sessions_dots_pass_under_its_runs_bars_waiting_or_running_without_showing_through():
+    run = line_page.Run("crown colors", "the whole suite", minute(10), minute(20), exit_code=0,
+                        got_the_machine=minute(12), session="5e55-10n")
+    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(30))}
+
+    chart = _chart(line_page.render([], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans)), hours=1)
+
+    assert chart.index("<rect class=session ") < chart.index("<rect class=waited ") < chart.index("<rect class=ran ")
+    see_through = re.findall(r"\.run \.waited \{[^}]*\}|\.run \.ran \{[^}]*\}", line_page.STYLE)
+    assert see_through
+    assert not any("opacity" in rule for rule in see_through)
 
 
 def test_an_open_sessions_dotted_line_runs_on_to_now():
