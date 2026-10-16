@@ -156,8 +156,10 @@ RAN_H = 20
 WAITED_H = 8
 ICON_H = 26
 STEM_W = 1.2
+RAN_RX = 5
 SESSION_H = 2.4
 DOT_EVERY = 6
+KEY_W = 4 * DOT_EVERY
 SHORTEST_BAR = 2
 SMALLEST_HIT = 10
 PLACE_X = 20
@@ -519,7 +521,7 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
                      + "</g>")
         if run.got_the_machine:
             bars.append(f"{group}<rect class=ran x={split:.1f} y={middle - RAN_H / 2} "
-                        f"width={held_width(split, end):.1f} height={RAN_H} rx=5></rect></g>")
+                        f"width={held_width(split, end):.1f} height={RAN_H} rx={RAN_RX}></rect></g>")
         icons_by_lane.setdefault(top, []).append(GutterIcon(split, run.kind, run.verdict))
     parts.extend(bars)
     for top, icons in icons_by_lane.items():
@@ -529,6 +531,10 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
             f"<circle class=dot cx={DOT_EVERY / 2} cy={SESSION_H / 2} r={SESSION_H / 2}></circle></pattern></defs>")
     return (f"<svg viewBox='0 0 {LABEL_W + CHART_W + RIGHT_MARGIN} {height + 6}' role=img "
             f"aria-label='Integration runs in the last {_hours_words(hours)}'>{dots}{''.join(parts)}</svg>")
+
+
+SESSION_TIP = _tip("Session", [("The dotted line runs from when the session was spawned until it was archived, or up "
+                                "to now while it is still open.")])
 
 
 def _kind_tip(kind: str) -> str:
@@ -552,12 +558,12 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
                      "</figure>" for hours in PERIODS_H)
     legend = "".join(f"<span class=key><span class='swatch {verdict.replace(' ', '-')}'></span>"
                      f"{VERDICT_MARKS[verdict]} {word}</span>" for verdict, word in VERDICT_WORDS.items())
-    kinds = "".join(f"<span class=key{_kind_tip(kind)}><svg viewBox='0 0 {icon_width(kind):.1f} {ICON_H}' "
-                    f"width={icon_width(kind):.1f} height={ICON_H}><g class='icon {kind.replace(' ', '-')} key-ink'>"
+    kinds = "".join(f"<span class=key{_kind_tip(kind)}><svg viewBox='0 0 {icon_width(kind):.1f} {ICON_H}'>"
+                    f"<g class='icon {kind.replace(' ', '-')} key-ink'>"
                     f"{ICONS[kind].drawing}</g></svg>{words}</span>" for kind, words in KIND_WORDS.items())
     return (f"<div class=frozen><div class=chart-head><div class=legend>{legend}<span class=key>"
-            f"<span class='swatch waited-key'></span>Waiting in line</span><span class=key>"
-            f"<span class='swatch session-key'></span>Session, spawned to archived</span></div>"
+            f"<span class='swatch waited-key'></span>Waiting in line</span><span class=key data-tip='{SESSION_TIP}'>"
+            f"<span class='swatch session-key'></span>Session</span></div>"
             f"<div class=periods>{buttons}</div>"
             f"<div class=kinds>{kinds}</div></div>{times}</div>{charts}")
 
@@ -566,7 +572,15 @@ DARK_BACKGROUND = "#0d0d0d"
 STYLE = f"""
 :root {{ --bg:{DARK_BACKGROUND}; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781; --waiting:#454441; --grid:#2c2c2a;
   --border:rgba(255,255,255,.10); --passed:#0ca30c; --failed:#d03b3b; --noresult:#f0c93d; --going:#3987e5;
-  --pressed:#2c2c2a; color-scheme:dark }}
+  --pressed:#2c2c2a; --unit:.95px; color-scheme:dark }}
+.swatch {{ display:inline-block; width:calc({KEY_W} * var(--unit)); height:calc({RAN_H} * var(--unit));
+  border-radius:calc({RAN_RX} * var(--unit)) }}
+.swatch.waited-key {{ background:var(--waiting); height:calc({WAITED_H} * var(--unit));
+  border-radius:calc({WAITED_H / 2} * var(--unit)) }}
+.swatch.session-key {{ width:calc({KEY_W} * var(--unit)); height:calc({SESSION_H} * var(--unit)); border-radius:0;
+  background:radial-gradient(circle, var(--muted) calc({SESSION_H / 2} * var(--unit)),
+  transparent calc({SESSION_H / 2} * var(--unit) + .5px)) 0 0 / calc({DOT_EVERY} * var(--unit)) 100% }}
+.kinds svg {{ height:calc({ICON_H} * var(--unit)); width:auto }}
 """ + """
 body { margin:0; padding:24px 16px 48px; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,"Segoe UI",sans-serif }
 main { max-width:1140px; margin:0 auto }
@@ -590,11 +604,8 @@ main { max-width:1140px; margin:0 auto }
 .legend, .kinds { display:flex; flex-wrap:wrap; gap:14px; color:var(--ink2); font-size:13px }
 .kinds { flex-basis:100%; gap:8px 18px }
 .key { display:inline-flex; align-items:center; gap:6px }
-.swatch { display:inline-block; width:14px; height:8px; border-radius:3px }
 .swatch.passed { background:var(--passed) } .swatch.failed { background:var(--failed) }
 .swatch.no-result { background:var(--noresult) } .swatch.going { background:var(--going) }
-.swatch.waited-key { background:var(--waiting); height:4px }
-.swatch.session-key { height:3px; background:radial-gradient(circle, var(--muted) 1.2px, transparent 1.4px) 0 0 / 6px 3px }
 pattern .dot { fill:var(--muted) }
 #tip { position:fixed; z-index:2; pointer-events:none; background:var(--surface); color:var(--ink); border:1px solid var(--border);
   border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:0 4px 14px rgba(0,0,0,.15); display:none; max-width:320px }
@@ -603,6 +614,14 @@ pattern .dot { fill:var(--muted) }
 
 SCRIPT = """
 const tip = document.getElementById('tip');
+const drawTheLegendAtTheChartsSize = () => {
+  const chart = document.querySelector('figure.period:not([hidden]) svg');
+  if (chart && chart.viewBox.baseVal.width) {
+    document.documentElement.style.setProperty('--unit', chart.getBoundingClientRect().width / chart.viewBox.baseVal.width + 'px');
+  }
+};
+drawTheLegendAtTheChartsSize();
+addEventListener('resize', drawTheLegendAtTheChartsSize);
 document.querySelectorAll('[data-tip]').forEach(run => {
   run.addEventListener('pointermove', event => {
     const [head, ...lines] = run.dataset.tip.split('|');
