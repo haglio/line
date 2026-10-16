@@ -303,10 +303,39 @@ class Triangle:
         return f"<path class=triangle fill-rule=evenodd d='{outline}'></path>"
 
 
+TAB, BLANK = 1, -1
+
+
+def _one_jigsaw_side(tab_size: float) -> list[Point]:
+    t = tab_size
+    return [(0.2, 0), (0.5, -t), (0.5 - t, t), (0.5 - 2 * t, 3 * t), (0.5 + 2 * t, 3 * t), (0.5 + t, t), (0.5, -t),
+            (0.8, 0), (1, 0)]
+
+
+@dataclass(frozen=True)
+class JigsawPiece:
+    middle: Point
+    side: float
+    tab_size: float
+
+    def svg(self) -> str:
+        (x, y), half = self.middle, self.side / 2
+        corners = [(x - half, y - half), (x + half, y - half), (x + half, y + half), (x - half, y + half)]
+        outline = f"M{corners[0][0]:.2f},{corners[0][1]:.2f}"
+        for start, end, facing in zip(corners, corners[1:] + corners[:1], (BLANK, TAB, BLANK, TAB), strict=True):
+            along = ((end[0] - start[0]) / self.side, (end[1] - start[1]) / self.side)
+            out = (along[1] * facing, -along[0] * facing)
+            handles = [(start[0] + (u * along[0] + v * out[0]) * self.side, start[1] + (u * along[1] + v * out[1]) * self.side)
+                       for u, v in _one_jigsaw_side(self.tab_size)]
+            outline += "".join(f"C{a[0]:.2f},{a[1]:.2f} {b[0]:.2f},{b[1]:.2f} {c[0]:.2f},{c[1]:.2f}"
+                               for a, b, c in zip(handles[::3], handles[1::3], handles[2::3], strict=True))
+        return f"<path class=jigsaw d='{outline}Z'></path>"
+
+
 @dataclass(frozen=True)
 class Icon:
     width: float
-    shapes: tuple[Stick | Ring | Box | Cell | Dot | Triangle, ...]
+    shapes: tuple[Stick | Ring | Box | Cell | Dot | Triangle | JigsawPiece, ...]
 
     @property
     def drawing(self) -> str:
@@ -328,15 +357,12 @@ def _square_packed_with_a_grid() -> Icon:
     return Icon(ICON_H, (SQUARE, *_cells([[0, 1, 2, 3]] * 4, 4, 3.2, 1.4)))
 
 
-PUZZLE_PIECE = _cells([[1, 3], [0, 1, 2, 3, 4], [1, 3]], 5, 3, 0.6)
-
-
 def _puzzle_piece_in_a_circle() -> Icon:
-    return Icon(ICON_H, (CIRCLE, *PUZZLE_PIECE))
+    return Icon(ICON_H, (CIRCLE, *_cells([[1, 3], [0, 1, 2, 3, 4], [1, 3]], 5, 3, 0.6)))
 
 
-def _puzzle_piece_in_a_square() -> Icon:
-    return Icon(ICON_H, (SQUARE, *PUZZLE_PIECE))
+def _jigsaw_piece_in_a_square() -> Icon:
+    return Icon(ICON_H, (SQUARE, JigsawPiece((ICON_H / 2, ICON_H / 2), 11, 0.13)))
 
 
 def _two_squares_in_a_circle() -> Icon:
@@ -364,7 +390,7 @@ def _snowflake_in_a_slashed_circle() -> Icon:
 
 ICONS = {ALL: _square_packed_with_a_grid(), CHANGED: _puzzle_piece_in_a_circle(), NAMED: _two_squares_in_a_circle(),
          NO_FLAKES: _snowflake_in_a_slashed_circle(),
-         AGAIN: _exclamation_mark_in_a_warning_triangle(), MEASURING: _puzzle_piece_in_a_square()}
+         AGAIN: _exclamation_mark_in_a_warning_triangle(), MEASURING: _jigsaw_piece_in_a_square()}
 ICON_GAP = 4
 KIND_WORDS = {ALL: "The whole suite", MEASURING: "Update relevance map", CHANGED: "Only all relevant tests",
               NAMED: "Specific tests", NO_FLAKES: "Nondeterministic test prevention", AGAIN: "Rerun failed tests"}

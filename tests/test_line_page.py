@@ -168,11 +168,45 @@ def test_the_new_tests_ten_times_icon_is_a_snowflake_in_a_slashed_circle_saying_
     assert "class=ring" in _icon(_one_run_of(line_page.NO_FLAKES), "no-flakes")
 
 
-def test_update_relevance_map_wears_the_relevant_tests_puzzle_piece_in_the_square_box_of_the_whole_suite():
+def _outline(drawing: str) -> list[tuple[float, float]]:
+    numbers = [float(number) for number in re.findall(r"-?\d+(?:\.\d+)?", re.search(r" d='([^']*)'", drawing)[1])]
+    here, points = (numbers[0], numbers[1]), []
+    for at in range(2, len(numbers), 6):
+        handles = [(numbers[at + n], numbers[at + n + 1]) for n in (0, 2, 4)]
+        points += [tuple((1 - s) ** 3 * p0 + 3 * (1 - s) ** 2 * s * p1 + 3 * (1 - s) * s ** 2 * p2 + s ** 3 * p3
+                         for p0, p1, p2, p3 in zip(here, *handles, strict=True))
+                   for s in (step / 200 for step in range(201))]
+        here = handles[-1]
+    return points
+
+
+def _height_across(points: list[tuple[float, float]], x: float, half_a_slice: float = 0.1) -> float:
+    near = [py for px, py in points if abs(px - x) < half_a_slice]
+    return max(near) - min(near)
+
+
+def test_update_relevance_map_wears_a_jigsaw_piece_tabbed_left_and_right_and_blanked_top_and_bottom_in_a_square_box():
     [box] = _shapes(line_page.MEASURING, line_page.Box)
+    [piece] = _shapes(line_page.MEASURING, line_page.JigsawPiece)
+    outline = _outline(piece.svg())
+    xs, ys = [x for x, _ in outline], [y for _, y in outline]
+    middle, half = line_page.ICON_H / 2, piece.side / 2
 
     assert box == _shapes(line_page.ALL, line_page.Box)[0]
-    assert _shapes(line_page.MEASURING, line_page.Cell) == _shapes(line_page.CHANGED, line_page.Cell)
+    assert not _shapes(line_page.MEASURING, line_page.Cell)
+    assert box.thickness < min(xs) < max(xs) < box.width - box.thickness
+    assert box.thickness < min(ys) < max(ys) < line_page.ICON_H - box.thickness
+    for tip, side in ((min(outline), -1), (max(outline), 1)):
+        assert abs(tip[1] - middle) < piece.side / 10
+        assert abs(tip[0] - middle) - half > piece.side / 4
+        tab = [(x, y) for x, y in outline if side * (x - middle) > half]
+        neck = _height_across(tab, middle + side * (half + piece.side / 40))
+        head = max(_height_across(tab, middle + side * (half + piece.side * n / 40)) for n in range(2, 10))
+        assert head > neck * 1.3
+    across_the_middle = [y for x, y in outline if abs(x - middle) < piece.side / 20]
+    assert min(across_the_middle) - (middle - half) > piece.side / 4
+    assert (middle + half) - max(across_the_middle) > piece.side / 4
+    assert "class=jigsaw" in _icon(_one_run_of(line_page.MEASURING), "measuring")
 
 
 def test_the_failed_tests_again_wear_an_exclamation_mark_in_a_warning_triangle():
