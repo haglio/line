@@ -282,6 +282,16 @@ def test_an_icon_and_its_line_wear_the_color_of_how_its_run_went():
     assert "<polygon class='stem failed' " in chart
 
 
+def test_the_icon_and_line_of_a_run_still_waiting_in_line_wear_the_gray_of_its_waiting_line():
+    waiting = line_page.Run("crown colors", "the whole suite", minute(50))
+
+    chart = _chart(line_page.render([waiting], [waiting], now=minute(60)), hours=4)
+
+    assert "<g class='icon all waiting' " in chart
+    assert "<polygon class='stem waiting' " in chart
+    assert ".icon.waiting, .stem.waiting { color:var(--waiting) }" in line_page.STYLE
+
+
 def test_the_legend_shows_each_kinds_icon_beside_what_it_stands_for():
     page = line_page.render([], [], now=T0)
 

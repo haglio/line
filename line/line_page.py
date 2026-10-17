@@ -126,10 +126,15 @@ def the_line(runs: Iterable[Run]) -> list[Run]:
 VERDICT_WORDS = {"going": "Currently running", "passed": "Passed", "failed": "Failed", "no result": "No result"}
 VERDICT_MARKS = {"going": "●", "passed": "✓", "failed": "✗", "no result": "?"}
 WAITING_IN_LINE = "Waiting in line"
+WAITING = "waiting"
+
+
+def _state(run: Run) -> str:
+    return WAITING if run.verdict == "going" and run.got_the_machine is None else run.verdict
 
 
 def _state_words(run: Run) -> str:
-    return WAITING_IN_LINE if run.verdict == "going" and run.got_the_machine is None else VERDICT_WORDS[run.verdict]
+    return WAITING_IN_LINE if _state(run) == WAITING else VERDICT_WORDS[run.verdict]
 
 
 def _clock(when: datetime, now: datetime | None = None) -> str:
@@ -417,7 +422,7 @@ def icon_width(kind: str) -> float:
 class GutterIcon:
     anchor: float
     kind: str
-    verdict: str
+    state: str
     left: float = 0.0
 
     @property
@@ -430,7 +435,7 @@ def _one_icon_per_pile(icons: list[GutterIcon]) -> list[GutterIcon]:
     for icon in sorted(icons, key=lambda icon: icon.anchor):
         pile = piles[-1] if piles else None
         if pile and pile.kind == icon.kind and icon.anchor < pile.anchor + pile.width + ICON_GAP:
-            piles[-1] = replace(pile, verdict="failed" if "failed" in (pile.verdict, icon.verdict) else icon.verdict)
+            piles[-1] = replace(pile, state="failed" if "failed" in (pile.state, icon.state) else icon.state)
         else:
             piles.append(icon)
     return piles
@@ -451,10 +456,10 @@ def _spread_apart(icons: list[GutterIcon], right_edge: float) -> list[GutterIcon
 def _gutter(top: float, icons: list[GutterIcon]) -> Iterator[str]:
     bars_bottom, icon_top = top + BARS_H / 2 + RAN_H / 2, top + BARS_H + (GUTTER_H - ICON_H) / 2
     for icon in _spread_apart(icons, LABEL_W + CHART_W + RIGHT_MARGIN):
-        verdict, half = icon.verdict.replace(" ", "-"), STEM_W / 2
-        yield (f"<polygon class='stem {verdict}' points='{icon.anchor - half:.1f},{bars_bottom} "
+        state, half = icon.state.replace(" ", "-"), STEM_W / 2
+        yield (f"<polygon class='stem {state}' points='{icon.anchor - half:.1f},{bars_bottom} "
                f"{icon.anchor + half:.1f},{bars_bottom} {icon.left + half:.1f},{icon_top} {icon.left - half:.1f},"
-               f"{icon_top}'></polygon><g class='icon {icon.kind.replace(' ', '-')} {verdict}' "
+               f"{icon_top}'></polygon><g class='icon {icon.kind.replace(' ', '-')} {state}' "
                f"transform='translate({icon.left:.1f},{icon_top})'>{ICONS[icon.kind].drawing}</g>")
 
 
@@ -553,7 +558,7 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         if run.got_the_machine:
             bars.append(f"{group}<rect class=ran x={split:.1f} y={middle - RAN_H / 2} "
                         f"width={held_width(split, end):.1f} height={RAN_H} rx={RAN_RX}></rect></g>")
-        icons_by_lane.setdefault(top, []).append(GutterIcon(split, run.kind, run.verdict))
+        icons_by_lane.setdefault(top, []).append(GutterIcon(split, run.kind, _state(run)))
     parts.extend(bars)
     for top, icons in icons_by_lane.items():
         parts.extend(_gutter(top, icons))
@@ -631,6 +636,7 @@ main { max-width:1140px; margin:0 auto }
 .run:hover .ran { filter:brightness(.8) }
 .icon.passed, .stem.passed { color:var(--passed) } .icon.failed, .stem.failed { color:var(--failed) }
 .icon.no-result, .stem.no-result { color:var(--noresult) } .icon.going, .stem.going { color:var(--going) }
+.icon.waiting, .stem.waiting { color:var(--waiting) }
 .icon.key-ink { color:var(--ink2) } .stem { fill:currentColor; opacity:.7 } .icon * { fill:currentColor }
 .legend, .kinds { display:flex; flex-wrap:wrap; gap:14px; color:var(--ink2); font-size:13px }
 .kinds { flex-basis:100%; gap:8px 18px }
