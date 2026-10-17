@@ -700,10 +700,21 @@ def test_the_page_is_dark_whatever_the_system_prefers():
     assert f"--bg:{line_page.DARK_BACKGROUND}" in page
 
 
-def test_the_legend_starts_with_still_going():
+def test_the_legend_starts_with_currently_running():
     page = line_page.render([], [], now=T0)
 
-    assert re.findall(r"<span class=key><span class='swatch ([^']+)'>", page)[0] == "going"
+    assert re.findall(r"<span class=key><span class='swatch ([^']+)'></span>([^<]*)</span>", page)[0] == (
+        "going", "● Currently running")
+
+
+def test_a_run_not_yet_ended_says_currently_running_once_it_has_the_machine_and_waiting_in_line_before():
+    running = line_page.Run("crown colors", "the whole suite", T0, got_the_machine=T0 + timedelta(minutes=5))
+    waiting = line_page.Run("quit faster", "the crown tests", T0 + timedelta(minutes=10))
+
+    chart = _chart(line_page.render([], [running, waiting], now=T0 + timedelta(minutes=20)), hours=1)
+
+    heads = {tip.split("|")[0]: tip.split("|")[1] for tip in re.findall(r"<g class='run going' data-tip='([^']*)'>", chart)}
+    assert heads == {"Currently running": "crown colors", "Waiting in line": "quit faster"}
 
 
 def test_only_a_run_that_got_the_machine_draws_a_running_bar():

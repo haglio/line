@@ -123,8 +123,13 @@ def the_line(runs: Iterable[Run]) -> list[Run]:
                   key=lambda run: (not run.holding, not run.short, run.joined))
 
 
-VERDICT_WORDS = {"going": "Still going", "passed": "Passed", "failed": "Failed", "no result": "No result"}
+VERDICT_WORDS = {"going": "Currently running", "passed": "Passed", "failed": "Failed", "no result": "No result"}
 VERDICT_MARKS = {"going": "●", "passed": "✓", "failed": "✗", "no result": "?"}
+WAITING_IN_LINE = "Waiting in line"
+
+
+def _state_words(run: Run) -> str:
+    return WAITING_IN_LINE if run.verdict == "going" and run.got_the_machine is None else VERDICT_WORDS[run.verdict]
 
 
 def _clock(when: datetime, now: datetime | None = None) -> str:
@@ -534,7 +539,7 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         hit_left = left - max(0.0, SMALLEST_HIT - (right - left)) / 2
         split = min(right, x(run.got_the_machine)) if run.got_the_machine else right
         ran = run.ran_s(now)
-        tip = _tip(VERDICT_WORDS[run.verdict], [
+        tip = _tip(_state_words(run), [
             row_of[id(run)], run.what,
             f"Joined {_clock(run.joined, now)}, ended {_clock(end, now) if run.ended else 'now'}",
             f"Waited {_span(run.waited_s(now))}, ran "
@@ -588,7 +593,7 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
                     f"<g class='icon {kind.replace(' ', '-')} key-ink'>"
                     f"{ICONS[kind].drawing}</g></svg>{words}</span>" for kind, words in KIND_WORDS.items())
     return (f"<div class=frozen><div class=chart-head><div class=legend>{legend}<span class=key>"
-            f"<span class='swatch waited-key'></span>Waiting in line</span><span class=key data-tip='{SESSION_TIP}'>"
+            f"<span class='swatch waited-key'></span>{WAITING_IN_LINE}</span><span class=key data-tip='{SESSION_TIP}'>"
             f"<span class='swatch session-key'></span>Session</span></div>"
             f"<div class=periods>{buttons}</div>"
             f"<div class=kinds>{kinds}</div></div>{times}</div>{charts}")
