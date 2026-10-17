@@ -162,6 +162,7 @@ def _tip(head: str, lines: list[str]) -> str:
 BARS_H = 30
 GUTTER_H = 36
 LANE_H = BARS_H + GUTTER_H
+ROW_GAP = 24
 RAN_H = 20
 WAITED_H = 8
 ICON_H = 26
@@ -174,6 +175,9 @@ SHORTEST_BAR = 2
 SMALLEST_HIT = 10
 PLACE_X = 20
 LABEL_W = 320
+BRACKET_X = LABEL_W - 6
+BRACKET_W = 1.5
+TICK_W = 5
 LABEL_CHARS = 42
 CHART_W = 860
 RIGHT_MARGIN = 20
@@ -503,12 +507,71 @@ def _times(now: datetime, hours: int) -> str:
     return f"<svg viewBox='0 0 {LABEL_W + CHART_W + RIGHT_MARGIN} {TIMES_H}' aria-hidden=true>{labels}</svg>"
 
 
+def _timelines(runs: list[Run], now: datetime) -> list[list[Run]]:
+    timelines: list[list[Run]] = []
+    for run in sorted(runs, key=lambda run: run.joined):
+        free = next((timeline for timeline in timelines if (timeline[-1].ended or now) <= run.joined), None)
+        if free is None:
+            timelines.append([run])
+        else:
+            free.append(run)
+    return timelines
+
+
+def _bracket(middles: list[float]) -> str:
+    joining = (BRACKET_X, middles[0] - BRACKET_W / 2, BRACKET_W, middles[-1] - middles[0] + BRACKET_W)
+    ticks = [(BRACKET_X, middle - BRACKET_W / 2, TICK_W, BRACKET_W) for middle in middles]
+    return ("<g class=bracket>" + "".join(f"<rect x={x} y={y:.2f} width={width} height={height:.2f}></rect>"
+                                          for x, y, width, height in [joining, *ticks]) + "</g>")
+
+
+@dataclass(frozen=True)
+class Layout:
+    middles: dict[str, list[float]]
+    top_of: dict[int, float]
+    height: float
+
+
+def _layout(runs_by_row: dict[str, list[Run]], now: datetime) -> Layout:
+    middles: dict[str, list[float]] = {}
+    top_of: dict[int, float] = {}
+    top = CHART_TOP
+    for row, runs in runs_by_row.items():
+        top += ROW_GAP if middles else 0
+        middles[row] = []
+        for timeline in _timelines(runs, now):
+            middles[row].append(top + BARS_H / 2)
+            top_of.update((id(run), top) for run in timeline)
+            top += LANE_H
+    return Layout(middles, top_of, top)
+
+
+def _session_dots(lifetime: Lifetime, middles: list[float], x: Callable[[datetime], float], now: datetime,
+                  hours: int) -> Iterator[str]:
+    start, end = x(lifetime.spawned), x(lifetime.archived or now)
+    ended = f"archived {_clock(lifetime.archived, now)}" if lifetime.archived else "still open"
+    for middle in middles:
+        yield (f"<rect class=session x={start:.1f} y={middle - SESSION_H / 2} width={end - start:.1f} "
+               f"height={SESSION_H} fill='url(#dots-{hours})'><title>Session spawned "
+               f"{_clock(lifetime.spawned, now)}, {ended}</title></rect>")
+
+
+def _row_name(row: str, middle: float, place: int | None) -> Iterator[str]:
+    if place is not None:
+        yield f"<text class=place x={PLACE_X} y={middle + 4.5}>{place}</text>"
+    fitted = row if len(row) <= LABEL_CHARS else row[:LABEL_CHARS - 1].rstrip() + "…"
+    note = ROW_NOTES.get(row) or (row if fitted != row else "")
+    title = f"<title>{_e(note)}</title>" if note else ""
+    yield f"<text class=lane x={LABEL_W - 10} y={middle + 4.5}>{_e(fitted)}{title}</text>"
+
+
 def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
     since = now - timedelta(hours=hours)
     shown = [run for run in runs if (run.ended or now) >= since]
     row_of = {id(run): row_name(run, rows.sessions.names) for run in shown}
-    lanes = [row for row in rows.order if row in row_of.values()]
-    height = CHART_TOP + LANE_H * len(lanes)
+    runs_by_row = {row: [run for run in shown if row_of[id(run)] == row] for row in rows.order
+                   if row in row_of.values()}
+    layout = _layout(runs_by_row, now)
     x = _across(now, hours)
 
     starts = sorted(x(run.got_the_machine) for run in shown if run.got_the_machine)
@@ -517,27 +580,20 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         following = next((other for other in starts if other > left), x(now))
         return min(max(x(end) - left, SHORTEST_BAR), following - left)
 
-    parts = [f"<rect class=grid x={x(tick) - 0.5:.1f} y=0 width=1 height={height}></rect>"
+    parts = [f"<rect class=grid x={x(tick) - 0.5:.1f} y=0 width=1 height={layout.height}></rect>"
              for tick in _ticks(since, now, GRID_EVERY_MIN[hours])]
-    for index, row in enumerate(lanes):
-        middle = CHART_TOP + LANE_H * index + BARS_H / 2
-        lifetime = rows.sessions.lifetime_of(run for run in shown if row_of[id(run)] == row)
+    for row, runs_of_row in runs_by_row.items():
+        middles = layout.middles[row]
+        if len(middles) > 1:
+            parts.append(_bracket(middles))
+        lifetime = rows.sessions.lifetime_of(runs_of_row)
         if lifetime is not None:
-            start, end = x(lifetime.spawned), x(lifetime.archived or now)
-            ended = f"archived {_clock(lifetime.archived, now)}" if lifetime.archived else "still open"
-            parts.append(f"<rect class=session x={start:.1f} y={middle - SESSION_H / 2} width={end - start:.1f} "
-                         f"height={SESSION_H} fill='url(#dots-{hours})'><title>Session spawned "
-                         f"{_clock(lifetime.spawned, now)}, {ended}</title></rect>")
-        if row in rows.places:
-            parts.append(f"<text class=place x={PLACE_X} y={middle + 4.5}>{rows.places[row]}</text>")
-        fitted = row if len(row) <= LABEL_CHARS else row[:LABEL_CHARS - 1].rstrip() + "…"
-        note = ROW_NOTES.get(row) or (row if fitted != row else "")
-        title = f"<title>{_e(note)}</title>" if note else ""
-        parts.append(f"<text class=lane x={LABEL_W - 10} y={middle + 4.5}>{_e(fitted)}{title}</text>")
+            parts.extend(_session_dots(lifetime, middles, x, now, hours))
+        parts.extend(_row_name(row, (middles[0] + middles[-1]) / 2, rows.places.get(row)))
     icons_by_lane: dict[float, list[GutterIcon]] = {}
     bars: list[str] = []
     for run in shown:
-        top = CHART_TOP + LANE_H * lanes.index(row_of[id(run)])
+        top = layout.top_of[id(run)]
         middle = top + BARS_H / 2
         end = run.ended or now
         left, right = x(run.joined), max(x(end), x(run.joined) + 3)
@@ -562,10 +618,10 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
     parts.extend(bars)
     for top, icons in icons_by_lane.items():
         parts.extend(_gutter(top, icons))
-    parts.append(f"<rect class=now x={x(now) - 0.75:.2f} y=0 width=1.5 height={height}></rect>")
+    parts.append(f"<rect class=now x={x(now) - 0.75:.2f} y=0 width=1.5 height={layout.height}></rect>")
     dots = (f"<defs><pattern id=dots-{hours} width={DOT_EVERY} height={SESSION_H} patternUnits=userSpaceOnUse>"
             f"<circle class=dot cx={DOT_EVERY / 2} cy={SESSION_H / 2} r={SESSION_H / 2}></circle></pattern></defs>")
-    return (f"<svg viewBox='0 0 {LABEL_W + CHART_W + RIGHT_MARGIN} {height + 6}' role=img "
+    return (f"<svg viewBox='0 0 {LABEL_W + CHART_W + RIGHT_MARGIN} {layout.height + 6}' role=img "
             f"aria-label='Integration runs in the last {_hours_words(hours)}'>{dots}{''.join(parts)}</svg>")
 
 
@@ -629,7 +685,7 @@ main { max-width:1140px; margin:0 auto }
 .period { margin:0 } .period svg { display:block; width:100%; min-width:760px; height:auto }
 .grid { fill:var(--grid) } .now { fill:var(--ink) }
 .tick { fill:var(--muted); font-size:12px; text-anchor:middle } .lane { fill:var(--ink2); font-size:13px; text-anchor:end }
-.place { fill:var(--ink); font-size:13px; font-weight:600; text-anchor:end }
+.place { fill:var(--ink); font-size:13px; font-weight:600; text-anchor:end } .bracket { fill:var(--ink2) }
 .run .hit { fill:transparent } .run .waited { fill:var(--waiting) }
 .run.passed .ran { fill:var(--passed) } .run.failed .ran { fill:var(--failed) }
 .run.no-result .ran { fill:var(--noresult) } .run.going .ran { fill:var(--going) }
