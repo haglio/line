@@ -485,6 +485,101 @@ def _places(chart: str) -> list[str]:
     return re.findall(r"<text class=place [^>]*>(\d+)</text>", chart)
 
 
+def test_a_run_that_joins_while_another_of_its_sessions_runs_is_going_gets_a_timeline_of_its_own():
+    running = line_page.Run("crown colors", "the whole suite", minute(0), minute(20), exit_code=0,
+                            got_the_machine=minute(0))
+    joined_meanwhile = line_page.Run("crown colors", "the crown tests", minute(10), minute(40), exit_code=0,
+                                     got_the_machine=minute(20))
+    afterwards = line_page.Run("crown colors", "the whole suite", minute(45), minute(50), exit_code=0,
+                               got_the_machine=minute(45))
+
+    chart = _chart(line_page.render([], [running, joined_meanwhile, afterwards], now=minute(60)), hours=1)
+
+    [first, second, third] = sorted(_bars(chart))
+    assert second[1] - first[1] == line_page.LANE_H
+    assert third[1] == first[1]
+    assert _rows(chart) == ["crown colors"]
+
+
+def _two_runs_of_one_session_at_once_and_another_sessions_run() -> list[line_page.Run]:
+    return [line_page.Run("crown colors", "the whole suite", minute(0), minute(20), exit_code=0,
+                          got_the_machine=minute(0)),
+            line_page.Run("crown colors", "the crown tests", minute(10), minute(40), exit_code=0,
+                          got_the_machine=minute(20)),
+            line_page.Run("quit faster", "the whole suite", minute(41), minute(50), exit_code=0,
+                          got_the_machine=minute(41))]
+
+
+def test_a_sessions_timelines_sit_closer_together_than_two_sessions_rows():
+    chart = _chart(line_page.render([], _two_runs_of_one_session_at_once_and_another_sessions_run(), now=minute(60)),
+                   hours=1)
+
+    running_y, meanwhile_y, other_sessions_y = (y for _, y, _ in sorted(_bars(chart)))
+    assert abs(meanwhile_y - running_y) < min(abs(other_sessions_y - running_y), abs(other_sessions_y - meanwhile_y))
+
+
+def test_a_bracket_joins_a_sessions_timelines_to_its_name_and_a_session_with_one_timeline_has_none():
+    chart = _chart(line_page.render([], _two_runs_of_one_session_at_once_and_another_sessions_run(), now=minute(60)),
+                   hours=1)
+
+    [bracket] = re.findall(r"<g class=bracket>(.*?)</g>", chart)
+    (bar_x, bar_y, bar_w, bar_h), *ticks = [
+        tuple(map(float, sizes)) for sizes in
+        re.findall(r"<rect x=([\d.]+) y=([\d.]+) width=([\d.]+) height=([\d.]+)></rect>", bracket)]
+    middles = [y + height / 2 for _, y, height in sorted(_bars(chart))[:2]]
+    assert (bar_y + bar_w / 2, bar_y + bar_h - bar_w / 2) == pytest.approx((min(middles), max(middles)))
+    assert sorted(tick_y + tick_h / 2 for _, tick_y, _, tick_h in ticks) == pytest.approx(sorted(middles))
+    assert all(bar_x == tick_x and tick_x + tick_w <= line_page.LABEL_W for tick_x, _, tick_w, _ in ticks)
+    assert bar_x > line_page.LABEL_W - 10
+
+
+def test_a_sessions_name_and_place_in_line_sit_at_the_middle_of_its_timelines():
+    running = line_page.Run("crown colors", "the whole suite", minute(30), got_the_machine=minute(30))
+    waiting = line_page.Run("crown colors", "the crown tests", minute(40))
+    alone = line_page.Run("quit faster", "the whole suite", minute(0), minute(20), exit_code=0,
+                          got_the_machine=minute(0))
+
+    chart = _chart(line_page.render([running, waiting], [running, waiting, alone], now=minute(60)), hours=1)
+
+    label_y = dict(zip(_rows(chart), (float(y) for y in re.findall(r"<text class=lane x=[\d.]+ y=([\d.]+)>", chart)),
+                       strict=True))
+    [place_y] = [float(y) for y in re.findall(r"<text class=place x=[\d.]+ y=([\d.]+)>", chart)]
+    joining_y, joining_height = map(float, re.search(r"<g class=bracket><rect x=[\d.]+ y=([\d.]+) width=[\d.]+ "
+                                                     r"height=([\d.]+)>", chart).groups())
+    (_, alone_y, alone_height), _ = sorted(_bars(chart))
+    below_the_middle = label_y["quit faster"] - (alone_y + alone_height / 2)
+    assert label_y["crown colors"] == place_y == pytest.approx(joining_y + joining_height / 2 + below_the_middle)
+
+
+def test_a_sessions_dotted_line_runs_along_each_of_its_timelines():
+    *crown, other = _two_runs_of_one_session_at_once_and_another_sessions_run()
+    crown = [replace(run, session="5e55-10n") for run in crown]
+    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(55))}
+
+    chart = _chart(line_page.render([], [*crown, other], now=minute(60), sessions=line_page.Sessions(lifetimes=spans)),
+                   hours=1)
+
+    dots = sorted(float(y) + float(height) / 2 for y, height in
+                  re.findall(r"<rect class=session x=[\d.]+ y=([\d.]+) width=[\d.]+ height=([\d.]+)", chart))
+    assert dots == pytest.approx(sorted(y + height / 2 for _, y, height in sorted(_bars(chart))[:2]))
+
+
+def test_each_timelines_icons_sit_in_the_gutter_under_its_own_bars():
+    chart = _chart(line_page.render([], _two_runs_of_one_session_at_once_and_another_sessions_run(), now=minute(60)),
+                   hours=1)
+
+    by_start = zip(sorted(_bars(chart)), sorted(_icons(chart), key=lambda icon: icon[1]), strict=True)
+    assert all(bar_y + bar_height <= icon_y < bar_y + line_page.LANE_H
+               for (_, bar_y, bar_height), (_, _, icon_y) in by_start)
+
+
+def test_hours_with_no_runs_draw_an_empty_chart_with_no_negative_sizes():
+    chart = _chart(line_page.render([], [], now=T0), hours=1)
+
+    assert re.search(r"viewBox='0 0 [\d.]+ ([\d.]+)'", chart)[1] == str(line_page.CHART_TOP + 6)
+    assert "=-" not in chart
+
+
 def test_the_run_holding_the_machine_is_first_in_line_from_what_it_wrote_down_alone():
     waiting = [record(f"claude/waiting-{name}", joined=n, short=n % 2 == 0)
                for n, name in enumerate(["one", "two", "three", "four", "five", "six"], start=1)]
