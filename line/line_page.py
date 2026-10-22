@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import html
 import json
-import math
 import os
 import re
 import sys
@@ -15,6 +14,22 @@ from pathlib import Path
 from app_support import haglio_settings, integration_runs, siblings
 from app_support.file_channel import write_whole
 from app_support.integration_runs import RunRecord
+from shared_ui.icons_svg import svg_mark
+from shared_ui.palette import (
+    AMBER,
+    BG_KEYCAP,
+    BG_PRIMARY,
+    BG_SECONDARY,
+    BLACK,
+    BLUE,
+    BORDER_DEFAULT,
+    GREEN,
+    RED,
+    TEXT_MUTED,
+    WHITE,
+    as_hex,
+    as_rgba,
+)
 
 _SESSION_SUFFIX = re.compile(r"-[0-9a-f]{6}$")
 
@@ -124,7 +139,8 @@ def the_line(runs: Iterable[Run]) -> list[Run]:
 
 
 VERDICT_WORDS = {"going": "Currently running", "passed": "Passed", "failed": "Failed", "no result": "No result"}
-VERDICT_MARKS = {"going": "●", "passed": "✓", "failed": "✗", "no result": "?"}
+VERDICT_MARKS = {"going": "disc", "passed": "check", "failed": "cross", "no result": "question"}
+VERDICT_MARK_H = 12
 WAITING_IN_LINE = "Waiting in line"
 WAITING = "waiting"
 
@@ -222,189 +238,14 @@ def _hours_words(hours: int) -> str:
     return "1 hour" if hours == 1 else f"{hours} hours"
 
 
-Point = tuple[float, float]
+KIND_MARKS = {ALL: "grid", CHANGED: "cells_in_circle", NAMED: "pair_in_circle",
+              NO_FLAKES: "snowflake_struck_out", AGAIN: "warning", MEASURING: "jigsaw"}
 
 
-@dataclass(frozen=True)
-class Stick:
-    name: str
-    start: Point
-    end: Point
-    thickness: float
-
-    def svg(self) -> str:
-        (x1, y1), (x2, y2) = self.start, self.end
-        length, middle_x, middle_y = math.dist(self.start, self.end) + self.thickness, (x1 + x2) / 2, (y1 + y2) / 2
-        return (f"<rect class={self.name} x={middle_x - length / 2:.2f} y={middle_y - self.thickness / 2:.2f} "
-                f"width={length:.2f} height={self.thickness} rx={self.thickness / 2} "
-                f"transform='rotate({math.degrees(math.atan2(y2 - y1, x2 - x1)):.1f} {middle_x:.2f} {middle_y:.2f})'>"
-                "</rect>")
+def kind_mark(kind: str) -> str:
+    return svg_mark(KIND_MARKS[kind], size=ICON_H)
 
 
-def _circle_path(middle: Point, radius: float) -> str:
-    (x, y), r = middle, radius
-    return f"M{x - r:.2f},{y:.2f}A{r:.2f},{r:.2f} 0 1 0 {x + r:.2f},{y:.2f}A{r:.2f},{r:.2f} 0 1 0 {x - r:.2f},{y:.2f}Z"
-
-
-@dataclass(frozen=True)
-class Ring:
-    middle: Point
-    radius: float
-    thickness: float
-
-    def svg(self) -> str:
-        return (f"<path class=ring fill-rule=evenodd d='{_circle_path(self.middle, self.radius + self.thickness / 2)}"
-                f"{_circle_path(self.middle, self.radius - self.thickness / 2)}'></path>")
-
-
-def _rounded_path(left: float, top: float, right: float, bottom: float, corner: float) -> str:
-    arc = f"A{corner},{corner} 0 0 1"
-    return (f"M{left + corner:.2f},{top:.2f}H{right - corner:.2f}{arc} {right:.2f},{top + corner:.2f}"
-            f"V{bottom - corner:.2f}{arc} {right - corner:.2f},{bottom:.2f}H{left + corner:.2f}{arc} {left:.2f},"
-            f"{bottom - corner:.2f}V{top + corner:.2f}{arc} {left + corner:.2f},{top:.2f}Z")
-
-
-@dataclass(frozen=True)
-class Box:
-    width: float
-    thickness: float
-    corner: float
-
-    def svg(self) -> str:
-        inner = self.thickness
-        return (f"<path class=box fill-rule=evenodd d='{_rounded_path(0, 0, self.width, ICON_H, self.corner)}"
-                f"{_rounded_path(inner, inner, self.width - inner, ICON_H - inner, self.corner - inner)}'></path>")
-
-
-@dataclass(frozen=True)
-class Cell:
-    left: float
-    top: float
-    size: float
-
-    def svg(self) -> str:
-        return (f"<rect class=cell x={self.left:.2f} y={self.top:.2f} width={self.size} height={self.size} "
-                f"rx={self.size / 5:.2f}></rect>")
-
-
-@dataclass(frozen=True)
-class Dot:
-    middle: Point
-    radius: float
-
-    def svg(self) -> str:
-        return f"<circle class=dot cx={self.middle[0]:.2f} cy={self.middle[1]:.2f} r={self.radius}></circle>"
-
-
-def _toward(point: Point, center: Point, share: float) -> Point:
-    return center[0] + (point[0] - center[0]) * share, center[1] + (point[1] - center[1]) * share
-
-
-@dataclass(frozen=True)
-class Triangle:
-    corners: tuple[Point, Point, Point]
-    thickness: float
-
-    def svg(self) -> str:
-        sides = [math.dist(self.corners[(n + 1) % 3], self.corners[(n + 2) % 3]) for n in range(3)]
-        center = tuple(sum(side * corner[axis] for side, corner in zip(sides, self.corners, strict=True)) / sum(sides)
-                       for axis in (0, 1))
-        (ax, ay), (bx, by), (cx, cy) = self.corners
-        inradius = abs((bx - ax) * (cy - ay) - (cx - ax) * (by - ay)) / sum(sides)
-        inner = [_toward(corner, center, 1 - self.thickness / inradius) for corner in self.corners]
-        outline = "".join(f"M{a[0]:.2f},{a[1]:.2f}L{b[0]:.2f},{b[1]:.2f}L{c[0]:.2f},{c[1]:.2f}Z"
-                          for a, b, c in (self.corners, inner))
-        return f"<path class=triangle fill-rule=evenodd d='{outline}'></path>"
-
-
-TAB, BLANK = 1, -1
-
-
-def _one_jigsaw_side(tab_size: float) -> list[Point]:
-    t = tab_size
-    return [(0.2, 0), (0.5, -t), (0.5 - t, t), (0.5 - 2 * t, 3 * t), (0.5 + 2 * t, 3 * t), (0.5 + t, t), (0.5, -t),
-            (0.8, 0), (1, 0)]
-
-
-@dataclass(frozen=True)
-class JigsawPiece:
-    middle: Point
-    side: float
-    tab_size: float
-
-    def svg(self) -> str:
-        (x, y), half = self.middle, self.side / 2
-        corners = [(x - half, y - half), (x + half, y - half), (x + half, y + half), (x - half, y + half)]
-        outline = f"M{corners[0][0]:.2f},{corners[0][1]:.2f}"
-        for start, end, facing in zip(corners, corners[1:] + corners[:1], (BLANK, TAB, BLANK, TAB), strict=True):
-            along = ((end[0] - start[0]) / self.side, (end[1] - start[1]) / self.side)
-            out = (along[1] * facing, -along[0] * facing)
-            handles = [(start[0] + (u * along[0] + v * out[0]) * self.side, start[1] + (u * along[1] + v * out[1]) * self.side)
-                       for u, v in _one_jigsaw_side(self.tab_size)]
-            outline += "".join(f"C{a[0]:.2f},{a[1]:.2f} {b[0]:.2f},{b[1]:.2f} {c[0]:.2f},{c[1]:.2f}"
-                               for a, b, c in zip(handles[::3], handles[1::3], handles[2::3], strict=True))
-        return f"<path class=jigsaw d='{outline}Z'></path>"
-
-
-@dataclass(frozen=True)
-class Icon:
-    width: float
-    shapes: tuple[Stick | Ring | Box | Cell | Dot | Triangle | JigsawPiece, ...]
-
-    @property
-    def drawing(self) -> str:
-        return "".join(shape.svg() for shape in self.shapes)
-
-
-def _cells(columns_by_row: list[list[int]], across: int, size: float, gap: float) -> list[Cell]:
-    width, height = across * (size + gap) - gap, len(columns_by_row) * (size + gap) - gap
-    left, top = (ICON_H - width) / 2, (ICON_H - height) / 2
-    return [Cell(left + column * (size + gap), top + row * (size + gap), size)
-            for row, columns in enumerate(columns_by_row) for column in columns]
-
-
-SQUARE = Box(ICON_H, 2, 4)
-CIRCLE = Ring((ICON_H / 2, ICON_H / 2), ICON_H / 2 - 1.6, 2.5)
-
-
-def _square_packed_with_a_grid() -> Icon:
-    return Icon(ICON_H, (SQUARE, *_cells([[0, 1, 2, 3]] * 4, 4, 3.2, 1.4)))
-
-
-def _puzzle_piece_in_a_circle() -> Icon:
-    return Icon(ICON_H, (CIRCLE, *_cells([[1, 3], [0, 1, 2, 3, 4], [1, 3]], 5, 3, 0.6)))
-
-
-def _jigsaw_piece_in_a_square() -> Icon:
-    return Icon(ICON_H, (SQUARE, JigsawPiece((ICON_H / 2, ICON_H / 2), 11, 0.13)))
-
-
-def _two_squares_in_a_circle() -> Icon:
-    return Icon(ICON_H, (CIRCLE, *_cells([[1, 3]], 5, 3, 0.6)))
-
-
-def _exclamation_mark_in_a_warning_triangle() -> Icon:
-    middle = ICON_H / 2
-    triangle = Triangle(((middle, 1.8), (1.2, ICON_H - 1.8), (ICON_H - 1.2, ICON_H - 1.8)), 2.2)
-    return Icon(ICON_H, (triangle, Stick("bar", (middle, 11), (middle, 15.8), 2.4), Dot((middle, 19.6), 1.45)))
-
-
-def _snowflake_in_a_slashed_circle() -> Icon:
-    middle, ring, arm, branch_at, branch, branch_angle = CIRCLE.middle, CIRCLE.radius, 7.4, 5, 2.9, 40
-
-    def point(angle: float, reach: float, start: Point = middle) -> Point:
-        return start[0] + math.cos(math.radians(angle)) * reach, start[1] + math.sin(math.radians(angle)) * reach
-
-    arms = [Stick("flake", point(angle + 180, arm), point(angle, arm), 1.5) for angle in (90, 30, 150)]
-    for angle in range(90, 450, 60):
-        fork = point(angle, branch_at)
-        arms += [Stick("flake", fork, point(angle + side * branch_angle, branch, fork), 1.5) for side in (-1, 1)]
-    return Icon(ICON_H, (CIRCLE, *arms, Stick("slash", point(225, ring), point(45, ring), CIRCLE.thickness)))
-
-
-ICONS = {ALL: _square_packed_with_a_grid(), CHANGED: _puzzle_piece_in_a_circle(), NAMED: _two_squares_in_a_circle(),
-         NO_FLAKES: _snowflake_in_a_slashed_circle(),
-         AGAIN: _exclamation_mark_in_a_warning_triangle(), MEASURING: _jigsaw_piece_in_a_square()}
 ICON_GAP = 4
 KIND_WORDS = {ALL: "The whole suite", MEASURING: "Update relevance map", CHANGED: "Only all relevant tests",
               NAMED: "Specific tests", NO_FLAKES: "Nondeterministic test prevention", AGAIN: "Rerun failed tests"}
@@ -418,10 +259,6 @@ KIND_TIPS = {MEASURING: RELEVANCE, CHANGED: RELEVANCE,
                           "passes some of the time is caught first.")]}
 
 
-def icon_width(kind: str) -> float:
-    return ICONS[kind].width
-
-
 @dataclass(frozen=True)
 class GutterIcon:
     anchor: float
@@ -429,16 +266,12 @@ class GutterIcon:
     state: str
     left: float = 0.0
 
-    @property
-    def width(self) -> float:
-        return icon_width(self.kind)
-
 
 def _one_icon_per_pile(icons: list[GutterIcon]) -> list[GutterIcon]:
     piles: list[GutterIcon] = []
     for icon in sorted(icons, key=lambda icon: icon.anchor):
         pile = piles[-1] if piles else None
-        if pile and pile.kind == icon.kind and icon.anchor < pile.anchor + pile.width + ICON_GAP:
+        if pile and pile.kind == icon.kind and icon.anchor < pile.anchor + ICON_H + ICON_GAP:
             piles[-1] = replace(pile, state="failed" if "failed" in (pile.state, icon.state) else icon.state)
         else:
             piles.append(icon)
@@ -448,11 +281,11 @@ def _one_icon_per_pile(icons: list[GutterIcon]) -> list[GutterIcon]:
 def _spread_apart(icons: list[GutterIcon], right_edge: float) -> list[GutterIcon]:
     placed: list[GutterIcon] = []
     for icon in _one_icon_per_pile(icons):
-        after_the_last = placed[-1].left + placed[-1].width + ICON_GAP if placed else icon.anchor
+        after_the_last = placed[-1].left + ICON_H + ICON_GAP if placed else icon.anchor
         placed.append(replace(icon, left=max(icon.anchor, after_the_last)))
     pulled_in: list[GutterIcon] = []
     for icon in reversed(placed):
-        pulled_in.append(replace(icon, left=min(icon.left, right_edge - icon.width)))
+        pulled_in.append(replace(icon, left=min(icon.left, right_edge - ICON_H)))
         right_edge = pulled_in[-1].left - ICON_GAP
     return pulled_in[::-1]
 
@@ -464,7 +297,7 @@ def _gutter(top: float, icons: list[GutterIcon]) -> Iterator[str]:
         yield (f"<polygon class='stem {state}' points='{icon.anchor - half:.1f},{bars_bottom} "
                f"{icon.anchor + half:.1f},{bars_bottom} {icon.left + half:.1f},{icon_top} {icon.left - half:.1f},"
                f"{icon_top}'></polygon><g class='icon {icon.kind.replace(' ', '-')} {state}' "
-               f"transform='translate({icon.left:.1f},{icon_top})'>{ICONS[icon.kind].drawing}</g>")
+               f"transform='translate({icon.left:.1f},{icon_top})'>{kind_mark(icon.kind)}</g>")
 
 
 @dataclass(frozen=True)
@@ -649,10 +482,11 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
     charts = "".join(f"<figure class=period data-hours={hours}{shown_first(hours)}>{_chart(runs, now, hours, rows)}"
                      "</figure>" for hours in PERIODS_H)
     legend = "".join(f"<span class=key><span class='swatch {verdict.replace(' ', '-')}'></span>"
-                     f"{VERDICT_MARKS[verdict]} {word}</span>" for verdict, word in VERDICT_WORDS.items())
-    kinds = "".join(f"<span class=key{_kind_tip(kind)}><svg viewBox='0 0 {icon_width(kind):.1f} {ICON_H}'>"
-                    f"<g class='icon {kind.replace(' ', '-')} key-ink'>"
-                    f"{ICONS[kind].drawing}</g></svg>{words}</span>" for kind, words in KIND_WORDS.items())
+                     f"<span class='icon {verdict.replace(' ', '-')}'>"
+                     f"{svg_mark(VERDICT_MARKS[verdict], size=VERDICT_MARK_H)}</span> {word}</span>"
+                     for verdict, word in VERDICT_WORDS.items())
+    kinds = "".join(f"<span class=key{_kind_tip(kind)}><span class='icon {kind.replace(' ', '-')} key-ink'>"
+                    f"{kind_mark(kind)}</span>{words}</span>" for kind, words in KIND_WORDS.items())
     return (f"<div class=frozen><div class=chart-head><div class=legend>{legend}<span class=key>"
             f"<span class='swatch waited-key'></span>{WAITING_IN_LINE}</span><span class=key data-tip='{SESSION_TIP}'>"
             f"<span class='swatch session-key'></span>Session</span></div>"
@@ -660,11 +494,13 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
             f"<div class=kinds>{kinds}</div></div>{times}</div>{charts}")
 
 
-DARK_BACKGROUND = "#0d0d0d"
+DARK_BACKGROUND = as_hex(BG_PRIMARY)
 STYLE = f"""
-:root {{ --bg:{DARK_BACKGROUND}; --surface:#1a1a19; --ink:#fff; --ink2:#c3c2b7; --muted:#898781; --waiting:#454441; --grid:#2c2c2a;
-  --border:rgba(255,255,255,.10); --passed:#0ca30c; --failed:#d03b3b; --noresult:#f0c93d; --going:#3987e5;
-  --pressed:#2c2c2a; --unit:.95px; color-scheme:dark }}
+:root {{ --bg:{DARK_BACKGROUND}; --surface:{as_hex(BG_PRIMARY)}; --ink:{as_hex(WHITE)}; --ink2:{as_hex(BORDER_DEFAULT)};
+  --muted:{as_hex(TEXT_MUTED)}; --waiting:{as_hex(BG_KEYCAP)}; --grid:{as_hex(BG_SECONDARY)};
+  --border:{as_rgba(WHITE, 0.1)}; --passed:{as_hex(GREEN)}; --failed:{as_hex(RED)}; --noresult:{as_hex(AMBER)};
+  --going:{as_hex(BLUE)}; --pressed:{as_hex(BG_SECONDARY)}; --shadow:{as_rgba(BLACK, 0.15)};
+  --unit:.95px; color-scheme:dark }}
 .swatch {{ display:inline-block; width:calc({KEY_W} * var(--unit)); height:calc({RAN_H} * var(--unit));
   border-radius:calc({RAN_RX} * var(--unit)) }}
 .swatch.waited-key {{ background:var(--waiting); height:calc({WAITED_H} * var(--unit));
@@ -701,7 +537,7 @@ main { max-width:1140px; margin:0 auto }
 .swatch.no-result { background:var(--noresult) } .swatch.going { background:var(--going) }
 pattern .dot { fill:var(--muted) }
 #tip { position:fixed; z-index:2; pointer-events:none; background:var(--surface); color:var(--ink); border:1px solid var(--border);
-  border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:0 4px 14px rgba(0,0,0,.15); display:none; max-width:320px }
+  border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:0 4px 14px var(--shadow); display:none; max-width:320px }
 #tip strong { display:block; font-size:13px }
 """
 
