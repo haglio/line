@@ -1,5 +1,4 @@
 import json
-import math
 import os
 import re
 import sys
@@ -10,6 +9,7 @@ from pathlib import Path
 import pytest
 from app_support.integration_runs import RunRecord, read_runs, write_run
 from app_support.win32 import process_started
+from shared_ui.icons_svg import svg_mark
 
 from line import line_page
 
@@ -102,123 +102,13 @@ def _one_run_of(kind: str) -> str:
     return _chart(line_page.render([], [run], now=minute(60)), hours=4)
 
 
-def _shapes(kind: str, shape: type) -> list:
-    return [each for each in line_page.ICONS[kind].shapes if isinstance(each, shape)]
-
-
-def _rows_of(cells: list) -> list[int]:
-    by_row: dict[float, int] = {}
-    for cell in cells:
-        by_row[cell.top] = by_row.get(cell.top, 0) + 1
-    return [by_row[top] for top in sorted(by_row)]
-
-
-def test_the_whole_suites_icon_is_a_square_box_packed_with_a_grid_of_little_squares():
-    [box] = _shapes(line_page.ALL, line_page.Box)
-    cells = _shapes(line_page.ALL, line_page.Cell)
-
-    assert box.width == line_page.ICON_H
-    rows = _rows_of(cells)
-    packed = 3
-    assert len(rows) >= packed
-    assert rows == [len(rows)] * len(rows)
-    assert all(box.thickness < cell.left and cell.left + cell.size < box.width - box.thickness for cell in cells)
-    assert "class=cell" in _icon(_one_run_of(line_page.ALL), "all")
-
-
-def _inside_the_ring(cell, ring) -> bool:
-    corners = [(cell.left + dx, cell.top + dy) for dx in (0, cell.size) for dy in (0, cell.size)]
-    return all(math.dist(corner, ring.middle) < ring.radius - ring.thickness / 2 for corner in corners)
-
-
-def test_the_tests_a_change_needs_wear_a_puzzle_piece_of_little_squares_in_a_circle_as_big_as_no_flakes():
-    [ring] = _shapes(line_page.CHANGED, line_page.Ring)
-    [no_flakes_ring] = _shapes(line_page.NO_FLAKES, line_page.Ring)
-    cells = _shapes(line_page.CHANGED, line_page.Cell)
-
-    assert (ring.middle, ring.radius) == (no_flakes_ring.middle, no_flakes_ring.radius)
-    assert _rows_of(cells) == [2, 5, 2]
-    assert all(_inside_the_ring(cell, ring) for cell in cells)
-
-
-def test_tests_by_name_wear_two_little_squares_side_by_side_in_that_circle():
-    [ring] = _shapes(line_page.NAMED, line_page.Ring)
-    [no_flakes_ring] = _shapes(line_page.NO_FLAKES, line_page.Ring)
-    cells = _shapes(line_page.NAMED, line_page.Cell)
-
-    assert (ring.middle, ring.radius) == (no_flakes_ring.middle, no_flakes_ring.radius)
-    assert _rows_of(cells) == [2]
-    assert all(_inside_the_ring(cell, ring) for cell in cells)
-    assert cells[1].left - cells[0].left > cells[0].size
-
-
-def test_the_new_tests_ten_times_icon_is_a_snowflake_in_a_slashed_circle_saying_no_flakes():
-    shapes = line_page.ICONS[line_page.NO_FLAKES].shapes
-
-    [ring] = [shape for shape in shapes if isinstance(shape, line_page.Ring)]
-    sticks = [shape for shape in shapes if isinstance(shape, line_page.Stick)]
-    [slash] = [stick for stick in sticks if stick.name == "slash"]
-    arms = [stick for stick in sticks if stick.name == "flake"]
-    (middle_x, middle_y) = ring.middle
-    assert slash.start[0] < middle_x < slash.end[0]
-    assert slash.start[1] < middle_y < slash.end[1]
-    a_snowflakes_arms = 6
-    assert len(arms) >= a_snowflakes_arms
-    assert all(math.dist(end, ring.middle) < ring.radius for arm in arms for end in (arm.start, arm.end))
-    assert "class=ring" in _icon(_one_run_of(line_page.NO_FLAKES), "no-flakes")
-
-
-def _outline(drawing: str) -> list[tuple[float, float]]:
-    numbers = [float(number) for number in re.findall(r"-?\d+(?:\.\d+)?", re.search(r" d='([^']*)'", drawing)[1])]
-    here, points = (numbers[0], numbers[1]), []
-    for at in range(2, len(numbers), 6):
-        handles = [(numbers[at + n], numbers[at + n + 1]) for n in (0, 2, 4)]
-        points += [tuple((1 - s) ** 3 * p0 + 3 * (1 - s) ** 2 * s * p1 + 3 * (1 - s) * s ** 2 * p2 + s ** 3 * p3
-                         for p0, p1, p2, p3 in zip(here, *handles, strict=True))
-                   for s in (step / 200 for step in range(201))]
-        here = handles[-1]
-    return points
-
-
-def _height_across(points: list[tuple[float, float]], x: float, half_a_slice: float = 0.1) -> float:
-    near = [py for px, py in points if abs(px - x) < half_a_slice]
-    return max(near) - min(near)
-
-
-def test_update_relevance_map_wears_a_jigsaw_piece_tabbed_left_and_right_and_blanked_top_and_bottom_in_a_square_box():
-    [box] = _shapes(line_page.MEASURING, line_page.Box)
-    [piece] = _shapes(line_page.MEASURING, line_page.JigsawPiece)
-    outline = _outline(piece.svg())
-    xs, ys = [x for x, _ in outline], [y for _, y in outline]
-    middle, half = line_page.ICON_H / 2, piece.side / 2
-
-    assert box == _shapes(line_page.ALL, line_page.Box)[0]
-    assert not _shapes(line_page.MEASURING, line_page.Cell)
-    assert box.thickness < min(xs) < max(xs) < box.width - box.thickness
-    assert box.thickness < min(ys) < max(ys) < line_page.ICON_H - box.thickness
-    for tip, side in ((min(outline), -1), (max(outline), 1)):
-        assert abs(tip[1] - middle) < piece.side / 10
-        assert abs(tip[0] - middle) - half > piece.side / 4
-        tab = [(x, y) for x, y in outline if side * (x - middle) > half]
-        neck = _height_across(tab, middle + side * (half + piece.side / 40))
-        head = max(_height_across(tab, middle + side * (half + piece.side * n / 40)) for n in range(2, 10))
-        assert head > neck * 1.3
-    across_the_middle = [y for x, y in outline if abs(x - middle) < piece.side / 20]
-    assert min(across_the_middle) - (middle - half) > piece.side / 4
-    assert (middle + half) - max(across_the_middle) > piece.side / 4
-    assert "class=jigsaw" in _icon(_one_run_of(line_page.MEASURING), "measuring")
-
-
-def test_the_failed_tests_again_wear_an_exclamation_mark_in_a_warning_triangle():
-    [triangle] = _shapes(line_page.AGAIN, line_page.Triangle)
-    [bar] = _shapes(line_page.AGAIN, line_page.Stick)
-    [dot] = _shapes(line_page.AGAIN, line_page.Dot)
-
-    (point, left, right) = triangle.corners
-    assert point[1] < left[1] == right[1]
-    assert bar.start[0] == bar.end[0] == dot.middle[0] == point[0]
-    assert point[1] < bar.start[1] < bar.end[1] < dot.middle[1] < left[1]
-    assert "class=triangle" in _icon(_one_run_of(line_page.AGAIN), "again")
+@pytest.mark.parametrize(("kind", "mark"), [
+    (line_page.ALL, "grid"), (line_page.CHANGED, "cells_in_circle"), (line_page.NAMED, "pair_in_circle"),
+    (line_page.NO_FLAKES, "snowflake_struck_out"), (line_page.AGAIN, "warning"),
+    (line_page.MEASURING, "jigsaw"),
+])
+def test_each_kind_of_run_wears_the_familys_mark_for_it(kind, mark):
+    assert svg_mark(mark, size=line_page.ICON_H) in _icon(_one_run_of(kind), kind.replace(" ", "-"))
 
 
 def test_icons_of_runs_that_start_close_together_in_one_row_spread_apart_instead_of_overlapping():
@@ -231,7 +121,7 @@ def test_icons_of_runs_that_start_close_together_in_one_row_spread_apart_instead
 
     [(_, first_x, first_y), (_, second_x, second_y)] = sorted(_icons(chart), key=lambda icon: icon[1])
     assert first_y == second_y
-    assert second_x >= first_x + line_page.icon_width(line_page.ALL)
+    assert second_x >= first_x + line_page.ICON_H
 
 
 def test_the_icon_of_a_run_still_waiting_at_the_right_edge_stays_on_the_chart():
@@ -241,7 +131,7 @@ def test_the_icon_of_a_run_still_waiting_at_the_right_edge_stays_on_the_chart():
 
     [(_, icon_x, _)] = _icons(chart)
     chart_width = float(re.search(r"viewBox='0 0 ([\d.]+) ", chart)[1])
-    assert icon_x + line_page.icon_width(line_page.ALL) <= chart_width
+    assert icon_x + line_page.ICON_H <= chart_width
 
 
 def test_runs_of_one_kind_piled_up_in_a_row_share_one_icon():
@@ -295,7 +185,7 @@ def test_the_icon_and_line_of_a_run_still_waiting_in_line_wear_the_gray_of_its_w
 def test_the_legend_shows_each_kinds_icon_beside_what_it_stands_for():
     page = line_page.render([], [], now=T0)
 
-    keys = re.findall(r"<span class=key[^>]*><svg [^>]*><g class='icon ([\w-]+) [^']*'.*?</svg>([^<]+)</span>",
+    keys = re.findall(r"<span class=key[^>]*><span class='icon ([\w-]+) [^']*'><svg .*?</svg></span>([^<]+)</span>",
                       re.search(r"<div class=kinds>(.*?)</div>", page)[1])
     assert keys == [("all", "The whole suite"), ("measuring", "Update relevance map"),
                     ("changed", "Only all relevant tests"), ("named", "Specific tests"),
@@ -306,7 +196,7 @@ def test_the_relevance_map_and_its_relevant_tests_share_a_tooltip_and_the_ten_ru
     page = line_page.render([], [], now=T0)
 
     tips = {kind: tip for tip, kind in
-            re.findall(r"<span class=key data-tip='([^']*)'><svg [^>]*><g class='icon ([\w-]+) ", page)}
+            re.findall(r"<span class=key data-tip='([^']*)'><span class='icon ([\w-]+) ", page)}
     assert tips["measuring"] == tips["changed"]
     assert "relevance map" in tips["changed"].lower()
     assert "10" in tips["no-flakes"]
@@ -808,8 +698,11 @@ def test_the_page_is_dark_whatever_the_system_prefers():
 def test_the_legend_starts_with_currently_running():
     page = line_page.render([], [], now=T0)
 
-    assert re.findall(r"<span class=key><span class='swatch ([^']+)'></span>([^<]*)</span>", page)[0] == (
-        "going", "● Currently running")
+    swatches = re.findall(r"<span class=key><span class='swatch ([^']+)'></span>", page)
+    going = re.search(r"<span class='swatch going'></span><span class='icon going'>(<svg .*?</svg>)</span> ([^<]*)</span>",
+                      page)
+    assert (swatches[0], *going.groups()) == (
+        "going", svg_mark("disc", size=line_page.VERDICT_MARK_H), "Currently running")
 
 
 def test_a_run_not_yet_ended_says_currently_running_once_it_has_the_machine_and_waiting_in_line_before():
