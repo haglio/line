@@ -30,6 +30,16 @@ from shared_ui.palette import (
     as_hex,
     as_rgba,
 )
+from shared_ui.spacing import (
+    BUTTON_PAD_H_TIGHT,
+    BUTTON_PAD_V,
+    BUTTON_RADIUS,
+    GAP_DIALOG,
+    GAP_MEDIUM,
+    GAP_SMALL,
+    MARGIN_DIALOG,
+)
+from shared_ui.type_scale import FONT_UI, SIZE_BODY, SIZE_SMALL, in_pixels
 
 _SESSION_SUFFIX = re.compile(r"-[0-9a-f]{6}$")
 
@@ -509,36 +519,43 @@ STYLE = f"""
   background:radial-gradient(circle, var(--muted) calc({SESSION_H / 2} * var(--unit)),
   transparent calc({SESSION_H / 2} * var(--unit) + .5px)) 0 0 / calc({DOT_EVERY} * var(--unit)) 100% }}
 .kinds svg {{ height:calc({ICON_H} * var(--unit)); width:auto }}
-""" + """
-body { margin:0; padding:24px 16px 48px; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,"Segoe UI",sans-serif }
-main { max-width:1140px; margin:0 auto }
-.chart-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:0 0 10px }
-.periods { margin-left:auto; display:inline-flex; gap:4px }
-.periods button { font:inherit; font-size:12px; color:var(--ink2); background:transparent; border:1px solid var(--border);
-  border-radius:6px; padding:3px 9px; cursor:pointer }
-.periods button[aria-pressed=true] { color:var(--ink); background:var(--pressed); font-weight:600 }
-.frozen { position:sticky; top:0; z-index:1; background:var(--bg); padding-top:8px }
-.period { margin:0 } .period svg { display:block; width:100%; min-width:760px; height:auto }
-.grid { fill:var(--grid) } .now { fill:var(--ink) }
-.tick { fill:var(--muted); font-size:12px; text-anchor:middle } .lane { fill:var(--ink2); font-size:13px; text-anchor:end }
-.place { fill:var(--ink); font-size:13px; font-weight:600; text-anchor:end } .bracket { fill:var(--ink2) }
-.run .hit { fill:transparent } .run .waited { fill:var(--waiting) }
-.run.passed .ran { fill:var(--passed) } .run.failed .ran { fill:var(--failed) }
-.run.no-result .ran { fill:var(--noresult) } .run.going .ran { fill:var(--going) }
-.run:hover .ran { filter:brightness(.8) }
-.icon.passed, .stem.passed { color:var(--passed) } .icon.failed, .stem.failed { color:var(--failed) }
-.icon.no-result, .stem.no-result { color:var(--noresult) } .icon.going, .stem.going { color:var(--going) }
-.icon.waiting, .stem.waiting { color:var(--waiting) }
-.icon.key-ink { color:var(--ink2) } .stem { fill:currentColor; opacity:.7 } .icon * { fill:currentColor }
-.legend, .kinds { display:flex; flex-wrap:wrap; gap:14px; color:var(--ink2); font-size:13px }
-.kinds { flex-basis:100%; gap:8px 18px }
-.key { display:inline-flex; align-items:center; gap:6px }
-.swatch.passed { background:var(--passed) } .swatch.failed { background:var(--failed) }
-.swatch.no-result { background:var(--noresult) } .swatch.going { background:var(--going) }
-pattern .dot { fill:var(--muted) }
-#tip { position:fixed; z-index:2; pointer-events:none; background:var(--surface); color:var(--ink); border:1px solid var(--border);
-  border-radius:8px; padding:8px 10px; font-size:12px; box-shadow:0 4px 14px var(--shadow); display:none; max-width:320px }
-#tip strong { display:block; font-size:13px }
+""" + f"""
+body {{ margin:0; padding:{MARGIN_DIALOG}px; background:var(--bg); color:var(--ink);
+  font:{in_pixels(SIZE_BODY)}px/1.45 '{FONT_UI}' }}
+main {{ max-width:1140px; margin:0 auto }}
+.chart-head {{ display:flex; flex-wrap:wrap; align-items:center; gap:{GAP_MEDIUM}px {GAP_DIALOG}px;
+  margin:0 0 {GAP_MEDIUM}px }}
+.periods {{ margin-left:auto; display:inline-flex; gap:{GAP_SMALL}px }}
+.periods button {{ font:inherit; font-size:{in_pixels(SIZE_SMALL)}px; color:var(--ink2); background:transparent;
+  border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px; padding:{BUTTON_PAD_V}px {BUTTON_PAD_H_TIGHT}px;
+  cursor:pointer }}
+.periods button[aria-pressed=true] {{ color:var(--ink); background:var(--pressed); font-weight:bold }}
+.frozen {{ position:sticky; top:0; z-index:1; background:var(--bg); padding-top:{GAP_MEDIUM}px }}
+.period {{ margin:0 }} .period svg {{ display:block; width:100%; min-width:760px; height:auto }}
+.grid {{ fill:var(--grid) }} .now {{ fill:var(--ink) }}
+.tick {{ fill:var(--muted); font-size:{in_pixels(SIZE_SMALL)}px; text-anchor:middle }}
+.lane {{ fill:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px; text-anchor:end }}
+.place {{ fill:var(--ink); font-size:{in_pixels(SIZE_SMALL)}px; font-weight:bold; text-anchor:end }}
+.bracket {{ fill:var(--ink2) }}
+.run .hit {{ fill:transparent }} .run .waited {{ fill:var(--waiting) }}
+.run.passed .ran {{ fill:var(--passed) }} .run.failed .ran {{ fill:var(--failed) }}
+.run.no-result .ran {{ fill:var(--noresult) }} .run.going .ran {{ fill:var(--going) }}
+.run:hover .ran {{ filter:brightness(.8) }}
+.icon.passed, .stem.passed {{ color:var(--passed) }} .icon.failed, .stem.failed {{ color:var(--failed) }}
+.icon.no-result, .stem.no-result {{ color:var(--noresult) }} .icon.going, .stem.going {{ color:var(--going) }}
+.icon.waiting, .stem.waiting {{ color:var(--waiting) }}
+.icon.key-ink {{ color:var(--ink2) }} .stem {{ fill:currentColor; opacity:.7 }} .icon * {{ fill:currentColor }}
+.legend, .kinds {{ display:flex; flex-wrap:wrap; gap:{GAP_DIALOG}px; color:var(--ink2);
+  font-size:{in_pixels(SIZE_SMALL)}px }}
+.kinds {{ flex-basis:100%; gap:{GAP_MEDIUM}px {GAP_DIALOG}px }}
+.key {{ display:inline-flex; align-items:center; gap:{GAP_MEDIUM}px }}
+.swatch.passed {{ background:var(--passed) }} .swatch.failed {{ background:var(--failed) }}
+.swatch.no-result {{ background:var(--noresult) }} .swatch.going {{ background:var(--going) }}
+pattern .dot {{ fill:var(--muted) }}
+#tip {{ position:fixed; z-index:2; pointer-events:none; background:var(--surface); color:var(--ink);
+  border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px; padding:{GAP_MEDIUM}px;
+  font-size:{in_pixels(SIZE_SMALL)}px; box-shadow:0 4px 14px var(--shadow); display:none; max-width:320px }}
+#tip strong {{ display:block; font-size:{in_pixels(SIZE_SMALL)}px }}
 """
 
 SCRIPT = """
