@@ -524,8 +524,11 @@ copy = line_tray.LineCopy("Line", sys.argv[1], "Local.Line.Test", Path(sys.argv[
 app = line_tray.application(["line_test"], copy)
 
 def quit_from_the_tray_menu():
-    [menu] = [widget for widget in QApplication.topLevelWidgets() if isinstance(widget, QMenu)]
-    [quit_item] = [action for action in menu.actions() if action.text() == "Quit"]
+    menus = [widget for widget in QApplication.topLevelWidgets() if isinstance(widget, QMenu)]
+    if not menus:
+        QTimer.singleShot(10, quit_from_the_tray_menu)
+        return
+    [quit_item] = [action for action in menus[0].actions() if action.text() == "Quit"]
     quit_item.trigger()
 
 QTimer.singleShot(0, quit_from_the_tray_menu)
