@@ -23,6 +23,7 @@ from PyQt6.QtWebEngineCore import QWebEngineProfile
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 from shared_ui.foreground import bring_to_front
+from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
 from shared_ui.preview_icon import app_icon
 
@@ -40,6 +41,10 @@ SERVER = "line_tray"
 PREVIEW_SERVER = "line_tray_preview"
 HAND_BACK_AFTER_MINUTES = 60
 UPDATE_CHECK_MS = 60_000
+STEPS = (
+    ("Loading Line...", 1.0),
+    ("Opening the window...", 1.0),
+)
 _log = logging.getLogger("line")
 
 
@@ -296,6 +301,14 @@ def wait_until_gone(name: str, seconds: float = 15) -> bool:
         time.sleep(0.2)
 
 
+def open_the_loading_screen(copy: LineCopy):
+    from shared_ui.loading_process import LoadingProcess  # noqa: PLC0415
+
+    return LoadingProcess.open(
+        caption="Line Loading", wordmark="Line", icon=ICON, preview=copy.preview, steps=STEPS,
+        cancel_hint="Press Esc to cancel opening Line", app_id=copy.app_user_model_id)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="line_tray")
     parser.add_argument("--open", action="store_true")
@@ -314,15 +327,27 @@ def main(argv: list[str] | None = None) -> int:
     return run_the_tray(app, copy, open_now=args.open)
 
 
-def run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
-    copy.state.mkdir(parents=True, exist_ok=True)
-    install_exception_logging(configure_logging("line", copy.log))
+def _build_the_window(copy: LineCopy, loading: Loading) -> LineWindow:
+    loading_line, opening_the_window = (step for step, _weight in STEPS)
+    loading.say(loading_line)
     writer = _PageWriter(copy.page)
     profile = web_profile(copy.storage)
     shown_as = replace(copy, title=title_until(copy, datetime.now(UTC).astimezone()))
     window = LineWindow(copy.page, open_window=lambda page: open_window(page, profile, shown_as),
                         write_now=writer.now, write_in_background=writer.in_background,
                         bring_to_front=bring_to_front)
+    loading.say(opening_the_window)
+    return window
+
+
+def run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
+    copy.state.mkdir(parents=True, exist_ok=True)
+    install_exception_logging(configure_logging("line", copy.log))
+    loading = Loading.at_the_click(app, _log, lambda: open_the_loading_screen(copy))
+    try:
+        window = _build_the_window(copy, loading)
+    except LoadingCanceled:
+        return 0
     app.aboutToQuit.connect(window.close)
 
     def show_the_window() -> None:
@@ -371,6 +396,7 @@ def run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
     if (updates := watch_for_updates(copy, window, quit_this_copy=app.quit)) is not None:
         looking_for_an_update.timeout.connect(updates.tick)
         looking_for_an_update.start(UPDATE_CHECK_MS)
+    loading.done()
     _log.info("started from %s", CHECKOUT)
     if open_now:
         show_the_window()

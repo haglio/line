@@ -8,8 +8,8 @@ version = "0.1.0"
 description = "Fun Time's integration line in the tray: who holds the machine, who waits, and how each run ended"
 requires-python = ">=3.14"
 dependencies = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.225",
-    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.205",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.259",
+    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.223",
     "PyQt6>=6.10,<7",
     "PyQt6-WebEngine>=6.10,<7",
 ]
@@ -34,6 +34,7 @@ siblings = ["app_support", "shared_ui"]
 app = "Line"
 run = "-m line --open"
 log = 'state\line_launcher.log'
+loading-screen = ["Updating Line..."]
 
 [tool.haglio.launchers."launch_line_in_the_tray.vbs"]
 app = "Line"
@@ -45,6 +46,7 @@ app = "Line (branch preview)"
 run = "-m line --open"
 venv = "primary"
 log = 'state\line_launcher.log'
+loading-screen = ["Updating Line..."]
 
 [tool.haglio.shortcuts."Line"]
 launcher = "launch_line.vbs"
