@@ -188,7 +188,7 @@ def _tip(head: str, lines: list[str]) -> str:
 BARS_H = 30
 GUTTER_H = 36
 LANE_H = BARS_H + GUTTER_H
-ROW_GAP = 24
+ROW_GAP = GAP_DIALOG
 RAN_H = 20
 WAITED_H = 8
 ICON_H = 26
@@ -206,7 +206,7 @@ BRACKET_W = 1.5
 TICK_W = 5
 LABEL_CHARS = 42
 CHART_W = 860
-RIGHT_MARGIN = 20
+RIGHT_MARGIN = MARGIN_DIALOG
 TIMES_H = 22
 CHART_TOP = 8
 PERIODS_H = (1, 4, 12, 24)
@@ -256,7 +256,7 @@ def kind_mark(kind: str) -> str:
     return svg_mark(KIND_MARKS[kind], size=ICON_H)
 
 
-ICON_GAP = 4
+ICON_GAP = GAP_SMALL
 KIND_WORDS = {ALL: "The whole suite", MEASURING: "Update relevance map", CHANGED: "Only all relevant tests",
               NAMED: "Specific tests", NO_FLAKES: "Nondeterministic test prevention", AGAIN: "Rerun failed tests"}
 RELEVANCE = ["Relevance map",
