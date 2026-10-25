@@ -8,8 +8,8 @@ version = "0.1.0"
 description = "Fun Time's integration line in the tray: who holds the machine, who waits, and how each run ended"
 requires-python = ">=3.14"
 dependencies = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.259",
-    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.256",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.284",
+    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.264",
     "PyQt6>=6.10,<7",
     "PyQt6-WebEngine>=6.10,<7",
 ]
@@ -19,7 +19,7 @@ dev = ["pytest>=9,<10", "pytest-cov>=7,<8", "pytest-timeout>=2.4,<3", "vulture>=
        "pillow>=12,<13"]
 
 [tool.pytest.ini_options]
-addopts = "--timeout=120 --timeout-method=thread -p app_support.sanitize.pytest_plugin -p app_support.coverage_gate --cov --cov-report="
+addopts = "--timeout=120 --timeout-method=thread -p app_support.sanitize.pytest_plugin -p app_support.clocks.pytest_plugin -p app_support.coverage_gate --cov --cov-report="
 testpaths = ["tests"]
 
 [tool.haglio]
