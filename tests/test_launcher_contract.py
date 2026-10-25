@@ -45,3 +45,11 @@ def test_a_preview_runs_its_own_checkout_on_the_primarys_venv():
     assert Path(report.value("directory")) == REPO_ROOT
     assert Path(report.value("interpreter")) == Path(report.value("primary")) / ".venv" / "Scripts" / "python.exe"
     assert report.value("arguments") == "-m line --open"
+
+
+@on_windows
+def test_a_new_previews_first_click_shows_the_pictures_an_earlier_preview_left():
+    report = dry_run(PREVIEW)
+
+    assert Path(report.value("pictures")) == (
+        Path(report.value("primary")) / "state" / "line_launcher.screen" / "preview")

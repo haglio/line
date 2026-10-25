@@ -47,6 +47,7 @@ run = "-m line --open"
 venv = "primary"
 log = 'state\line_launcher.log'
 loading-screen = ["Updating Line..."]
+preview = true
 
 [tool.haglio.shortcuts."Line"]
 launcher = "launch_line.vbs"
