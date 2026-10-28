@@ -95,7 +95,7 @@ class Run:
         return self.ended is None and self.got_the_machine is not None
 
     def waited_s(self, now: datetime) -> float:
-        return ((self.got_the_machine or self.ended or now) - self.joined).total_seconds()
+        return ((self.got_the_machine or now) - self.joined).total_seconds()
 
     def ran_s(self, now: datetime) -> float | None:
         return ((self.ended or now) - self.got_the_machine).total_seconds() if self.got_the_machine else None
@@ -104,7 +104,7 @@ class Run:
     def verdict(self) -> str:
         if self.ended is None:
             return "going"
-        if self.exit_code is None or self.got_the_machine is None:
+        if self.exit_code is None:
             return "no result"
         return "passed" if self.exit_code == 0 else "failed"
 
@@ -136,6 +136,8 @@ def runs_from(records: Iterable[RunRecord],
         elif record.seen is not None:
             ended, exit_code = record.seen, None
         else:
+            continue
+        if ended is not None and record.got_the_machine is None:
             continue
         who, kind = VERIFIER if record.checkout == VERIFYING_MAIN else who_of(record.branch), kind_of(record)
         runs.append(Run(who, describe(record.what, kind), record.joined, ended, exit_code, record.got_the_machine,
@@ -446,8 +448,7 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         tip = _tip(_state_words(run), [
             row_of[id(run)], run.what,
             f"Joined {_clock(run.joined, now)}, ended {_clock(end, now) if run.ended else 'now'}",
-            f"Waited {_span(run.waited_s(now))}, ran "
-            + (_span(ran) if ran is not None else "never" if run.ended else "not yet")])
+            f"Waited {_span(run.waited_s(now))}, ran " + (_span(ran) if ran is not None else "not yet")])
         group = f"<g class='run {run.verdict.replace(' ', '-')}' data-tip='{tip}'>"
         parts.append(f"{group}<rect class=hit x={hit_left:.1f} y={top} width={max(right - left, SMALLEST_HIT):.1f} "
                      f"height={BARS_H}></rect>"

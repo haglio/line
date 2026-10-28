@@ -536,9 +536,16 @@ def test_a_run_from_before_runs_were_seen_that_stopped_unfinished_is_left_out_ha
     assert line_page.runs_from([unfinished], still_going=none_going) == []
 
 
+def test_a_run_stopped_before_its_turn_never_ran_so_it_is_left_off_however_it_ended():
+    left_the_line = record("claude/quit-faster", joined=20, ended=minute(31))
+    vanished_while_waiting = record("claude/hud-corner", joined=20, seen=minute(31))
+
+    assert line_page.runs_from([left_the_line, vanished_while_waiting], still_going=none_going) == []
+
+
 def test_a_runs_record_says_which_claude_session_asked_for_it():
-    [run] = line_page.runs_from([record("HEAD", joined=0, session="5e55-10n", ended=minute(0), exit_code=0)],
-                                still_going=none_going)
+    [run] = line_page.runs_from([record("HEAD", joined=0, session="5e55-10n", got_the_machine=minute(0),
+                                        ended=minute(0), exit_code=0)], still_going=none_going)
 
     assert run.session == "5e55-10n"
 
@@ -715,18 +722,13 @@ def test_a_run_not_yet_ended_says_currently_running_once_it_has_the_machine_and_
     assert heads == {"Currently running": "crown colors", "Waiting in line": "quit faster"}
 
 
-def test_only_a_run_that_got_the_machine_draws_a_running_bar():
-    now = T0 + timedelta(hours=2)
-    gave_up_waiting = line_page.Run("quit faster", "the whole suite", T0, T0 + timedelta(minutes=30), exit_code=1)
-    ran = replace(gave_up_waiting, got_the_machine=T0 + timedelta(minutes=20))
+def test_a_run_that_waited_and_then_ran_draws_its_gray_wait_and_then_its_running_bar():
+    ran = line_page.Run("quit faster", "the whole suite", T0, T0 + timedelta(minutes=30), exit_code=1,
+                        got_the_machine=T0 + timedelta(minutes=20))
 
-    gave_up_page = _chart(line_page.render([], [gave_up_waiting], now), hours=4)
-    ran_page = _chart(line_page.render([], [ran], now), hours=4)
+    ran_page = _chart(line_page.render([], [ran], T0 + timedelta(hours=2)), hours=4)
 
-    assert (gave_up_page.count("class=waited"), gave_up_page.count("class=ran")) == (1, 0)
-    assert gave_up_waiting.verdict == "no result"
-    assert (ran_page.count("class=waited"), ran_page.count("class=ran")) == (1, 1)
-    assert ran.verdict == "failed"
+    assert (ran_page.count("class=waited"), ran_page.count("class=ran"), ran.verdict) == (1, 1, "failed")
 
 
 def test_each_refresh_draws_the_page_with_the_tool_as_it_is_on_disk_then(tmp_path):
