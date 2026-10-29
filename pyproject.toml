@@ -10,8 +10,8 @@ requires-python = ">=3.14"
 dependencies = [
     "app-support @ git+https://github.com/haglio/app_support@v0.1.292",
     "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.267",
-    "PyQt6>=6.10,<7",
-    "PyQt6-WebEngine>=6.10,<7",
+    "PyQt6>=6.11,<6.12",
+    "PyQt6-WebEngine>=6.11,<6.12",
 ]
 
 [project.optional-dependencies]
