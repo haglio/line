@@ -8,8 +8,8 @@ version = "0.1.0"
 description = "Fun Time's integration line in the tray: who holds the machine, who waits, and how each run ended"
 requires-python = ">=3.14"
 dependencies = [
-    "app-support @ git+https://github.com/haglio/app_support@v0.1.294",
-    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.271",
+    "app-support @ git+https://github.com/haglio/app_support@v0.1.297",
+    "shared-ui @ git+https://github.com/haglio/shared_ui@v0.1.272",
     "PyQt6>=6.11,<6.12",
     "PyQt6-WebEngine>=6.11,<6.12",
 ]
