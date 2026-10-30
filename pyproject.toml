@@ -19,7 +19,7 @@ dev = ["pytest>=9,<10", "pytest-cov>=7,<8", "pytest-timeout>=2.4,<3", "vulture>=
        "pillow>=12,<13"]
 
 [tool.pytest.ini_options]
-addopts = "--timeout=120 --timeout-method=thread -p app_support.sanitize.pytest_plugin -p app_support.clocks.pytest_plugin -p app_support.coverage_gate --cov --cov-report="
+addopts = "--timeout=120 --timeout-method=thread -p app_support.sanitize.pytest_plugin -p app_support.gates.pytest_plugin -p app_support.coverage_gate --cov --cov-report="
 testpaths = ["tests"]
 
 [tool.haglio]

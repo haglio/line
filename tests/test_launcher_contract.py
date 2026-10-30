@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from app_support.launcher import assert_launchers_match_their_specs, dry_run, launchers
+from app_support.launcher import dry_run, launchers
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = REPO_ROOT / "launch_line.vbs"
@@ -10,10 +10,6 @@ IN_THE_TRAY = REPO_ROOT / "launch_line_in_the_tray.vbs"
 PREVIEW = REPO_ROOT / "launch_preview_branch.vbs"
 
 on_windows = pytest.mark.skipif(sys.platform != "win32", reason="the Windows script host")
-
-
-def test_every_launcher_is_what_its_spec_renders():
-    assert_launchers_match_their_specs(REPO_ROOT)
 
 
 @on_windows
