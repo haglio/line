@@ -97,8 +97,12 @@ def the_line_he_uses() -> Path:
     return Path(found.stdout.strip()).parent
 
 
+def _start_line_in(checkout: Path, *flags: str, start: Callable[..., object]) -> None:
+    start([sys.executable, "-m", "line", *flags], cwd=checkout, creationflags=subprocess.CREATE_NO_WINDOW)
+
+
 def hand_back(start: Callable[..., object] = subprocess.Popen) -> None:
-    start([sys.executable, "-m", "line"], cwd=the_line_he_uses(), creationflags=subprocess.CREATE_NO_WINDOW)
+    _start_line_in(the_line_he_uses(), start=start)
 
 
 def application(argv: list[str], copy: LineCopy) -> QApplication:
@@ -200,7 +204,7 @@ def _contents(path: Path) -> bytes | None:
 
 
 def start_a_fresh_copy(start: Callable[..., object] = subprocess.Popen) -> None:
-    start([sys.executable, "-m", "line", "--open"], cwd=CHECKOUT, creationflags=subprocess.CREATE_NO_WINDOW)
+    _start_line_in(CHECKOUT, "--open", start=start)
 
 
 def watch_for_updates(copy: LineCopy, window: LineWindow, *,
