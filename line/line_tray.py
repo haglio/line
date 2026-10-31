@@ -15,6 +15,7 @@ from pathlib import Path
 
 from app_support import production_update
 from app_support.logging_utils import configure_logging, install_exception_logging
+from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import set_app_user_model_id
 from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QColor, QIcon
@@ -243,17 +244,18 @@ class _PageWriter:
         self.page = page
         self._running: subprocess.Popen | None = None
 
+    def _command(self) -> list[str]:
+        return line_page.refresh_command(self.page, 1, line_page.WATCH_EVERY_S)
+
     def now(self) -> None:
         with contextlib.suppress(subprocess.TimeoutExpired, OSError):
-            subprocess.run(line_page.refresh_command(self.page, 1, line_page.WATCH_EVERY_S),
-                           creationflags=subprocess.CREATE_NO_WINDOW, timeout=line_page.WATCH_EVERY_S * 4,
-                           check=False)
+            subprocess.run(self._command(), timeout=line_page.WATCH_EVERY_S * 4, check=False,
+                           **hidden_subprocess_kwargs())
 
     def in_background(self) -> None:
         if self._running is not None and self._running.poll() is None:
             return
-        self._running = subprocess.Popen(line_page.refresh_command(self.page, 1, line_page.WATCH_EVERY_S),
-                                         creationflags=subprocess.CREATE_NO_WINDOW)
+        self._running = subprocess.Popen(self._command(), **hidden_subprocess_kwargs())
 
 
 def serve_requests(name: str, *, open_line: Callable[[], object], quit_line: Callable[[], object]) -> QLocalServer:

@@ -548,3 +548,36 @@ def test_quit_from_the_tray_menu_is_the_last_thing_line_writes_before_its_exit_c
 
     assert _what_line_wrote(tmp_path)[-2:] == ["asked to quit by the tray menu", "exiting with code 0"]
 
+
+
+def test_the_page_is_written_now_by_a_hidden_console_child(tmp_path, monkeypatch):
+    ran = []
+    monkeypatch.setattr(line_tray.subprocess, "run", lambda command, **options: ran.append((command, options)))
+
+    line_tray._PageWriter(tmp_path / "line.html").now()
+
+    (command, options), = ran
+    assert command == line_page.refresh_command(tmp_path / "line.html", 1, line_page.WATCH_EVERY_S)
+    assert options["creationflags"] & subprocess.CREATE_NO_WINDOW
+    assert options["startupinfo"].wShowWindow == 0
+
+
+def test_the_page_is_written_in_the_background_by_one_hidden_child_at_a_time(tmp_path, monkeypatch):
+    started = []
+
+    class _StillWriting:
+        def __init__(self, command, **options):
+            started.append((command, options))
+
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(line_tray.subprocess, "Popen", _StillWriting)
+    writer = line_tray._PageWriter(tmp_path / "line.html")
+
+    writer.in_background()
+    writer.in_background()
+
+    (command, options), = started
+    assert command == line_page.refresh_command(tmp_path / "line.html", 1, line_page.WATCH_EVERY_S)
+    assert options["startupinfo"].wShowWindow == 0
