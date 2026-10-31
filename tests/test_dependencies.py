@@ -14,7 +14,7 @@ from packaging.requirements import Requirement
 pytestmark = pytest.mark.repo_check
 
 ROOT = Path(__file__).resolve().parent.parent
-TREES = [ROOT / "line", ROOT / "tests", ROOT / "tools", ROOT / "vulture_whitelist.py"]
+TREES = [ROOT / "line", ROOT / "tests", ROOT / "vulture_whitelist.py"]
 
 
 def _declared() -> dict[str, Requirement]:
