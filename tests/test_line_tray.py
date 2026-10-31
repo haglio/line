@@ -343,9 +343,9 @@ def test_the_copy_he_uses_keeps_lines_name_its_place_and_its_taskbar_button():
 
 
 def test_a_preview_names_its_feature_and_keeps_out_of_the_way_of_the_copy_he_uses():
-    copy = line_tray.this_copy(Preview("the amber L"))
+    copy = line_tray.this_copy(Preview("the yellow L"))
 
-    assert copy.title == "Line \u2014 preview of the amber L"
+    assert copy.title == "Line \u2014 preview of the yellow L"
     assert (copy.server_name, copy.app_user_model_id) == ("line_tray_preview", "Local.Line.Preview")
     assert (copy.page, copy.storage) == (STATE / "line.html", STATE / "line_storage")
 
@@ -356,15 +356,15 @@ def _center(icon: QIcon):
     return color.red(), color.green(), color.blue()
 
 
-def test_a_previews_l_is_amber_where_the_copy_he_uses_wears_the_pink_one(offscreen_app):
+def test_a_previews_l_is_yellow_where_the_copy_he_uses_wears_the_pink_one(offscreen_app):
     assert _center(line_tray.this_copy(None).icon()) == MAGENTA
-    assert _center(line_tray.this_copy(Preview("the amber L")).icon()) == PREVIEW_INK
+    assert _center(line_tray.this_copy(Preview("the yellow L")).icon()) == PREVIEW_INK
 
 
 def test_a_preview_window_keeps_its_title_after_its_page_names_itself(offscreen_app, tmp_path):
     page = tmp_path / "line.html"
     page.write_text("<!doctype html><title>Line</title>", encoding="utf-8")
-    copy = line_tray.this_copy(Preview("the amber L"))
+    copy = line_tray.this_copy(Preview("the yellow L"))
     profile = line_tray.web_profile(tmp_path / "storage")
     view = line_tray.open_window(page, profile, copy)
     loaded = QSignalSpy(view.loadFinished)
@@ -426,7 +426,7 @@ def test_a_quit_sent_by_another_copy_of_line_quits_this_one(offscreen_app):
 
 
 def test_a_preview_takes_over_from_the_line_he_uses_and_from_an_earlier_preview():
-    assert line_tray.this_copy(Preview("the amber L")).copies_it_replaces == ("line_tray", "line_tray_preview")
+    assert line_tray.this_copy(Preview("the yellow L")).copies_it_replaces == ("line_tray", "line_tray_preview")
 
 
 def test_the_line_he_uses_takes_the_work_back_from_a_preview():
@@ -434,7 +434,7 @@ def test_the_line_he_uses_takes_the_work_back_from_a_preview():
 
 
 def test_a_preview_window_says_until_when_it_keeps_the_work_and_the_line_he_uses_says_nothing_of_it():
-    preview = line_tray.this_copy(Preview("the amber L"))
+    preview = line_tray.this_copy(Preview("the yellow L"))
 
     assert line_tray.title_until(preview, datetime(2026, 10, 12, 19, 58, tzinfo=UTC)) == preview.title + ", until 20:58"
     assert line_tray.title_until(line_tray.this_copy(None), datetime(2026, 10, 12, 19, 58, tzinfo=UTC)) == "Line"

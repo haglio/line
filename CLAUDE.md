@@ -19,7 +19,7 @@ From a worktree, run the primary checkout's `.venv` with the worktree as the wor
 
 ## Judging a branch before it ships
 
-- `launch_preview_branch.vbs` in a worktree runs that worktree's Line on the primary's venv, wearing the amber L and the session's name; it stands in for his Line and hands the work back when he quits it or after an hour.
+- `launch_preview_branch.vbs` in a worktree runs that worktree's Line on the primary's venv, wearing the yellow L and the session's name; it stands in for his Line and hands the work back when he quits it or after an hour.
 - Hand it to him as `[▶ Launch the Line preview](http://127.0.0.1:41777/launch?t=a780245a4cdcfcb2a2e3b365&p=<the worktree's launch_preview_branch.vbs, percent-encoded>&b=<branch>)`.
 
 ## Shipping
