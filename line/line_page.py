@@ -16,7 +16,6 @@ from app_support.file_channel import write_whole
 from app_support.integration_runs import RunRecord
 from shared_ui.icons_svg import svg_icon
 from shared_ui.palette import (
-    AMBER,
     BG_KEYCAP,
     BG_PRIMARY,
     BG_SECONDARY,
@@ -27,6 +26,7 @@ from shared_ui.palette import (
     RED,
     TEXT_MUTED,
     WHITE,
+    YELLOW,
     as_hex,
     as_rgba,
 )
@@ -512,7 +512,7 @@ DARK_BACKGROUND = as_hex(BG_PRIMARY)
 STYLE = f"""
 :root {{ --bg:{DARK_BACKGROUND}; --surface:{as_hex(BG_PRIMARY)}; --ink:{as_hex(WHITE)}; --ink2:{as_hex(BORDER_DEFAULT)};
   --muted:{as_hex(TEXT_MUTED)}; --waiting:{as_hex(BG_KEYCAP)}; --grid:{as_hex(BG_SECONDARY)};
-  --border:{as_rgba(WHITE, 0.1)}; --passed:{as_hex(GREEN)}; --failed:{as_hex(RED)}; --noresult:{as_hex(AMBER)};
+  --border:{as_rgba(WHITE, 0.1)}; --passed:{as_hex(GREEN)}; --failed:{as_hex(RED)}; --noresult:{as_hex(YELLOW)};
   --going:{as_hex(BLUE)}; --pressed:{as_hex(BG_SECONDARY)}; --shadow:{as_rgba(BLACK, 0.15)};
   --unit:.95px; color-scheme:dark }}
 .swatch {{ display:inline-block; width:calc({KEY_W} * var(--unit)); height:calc({RAN_H} * var(--unit));
