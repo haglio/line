@@ -15,6 +15,7 @@ from pathlib import Path
 
 from app_support import production_update
 from app_support.logging_utils import configure_logging, install_exception_logging
+from app_support.siblings import primary_checkout_of
 from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import set_app_user_model_id
 from PyQt6.QtCore import Qt, QTimer, QUrl
@@ -92,9 +93,7 @@ def title_until(copy: LineCopy, now: datetime) -> str:
 
 
 def the_line_he_uses() -> Path:
-    found = subprocess.run(["git", "-C", str(CHECKOUT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                           capture_output=True, text=True, check=False, creationflags=subprocess.CREATE_NO_WINDOW)
-    return Path(found.stdout.strip()).parent
+    return primary_checkout_of(CHECKOUT)
 
 
 def _start_line_in(checkout: Path, *flags: str, start: Callable[..., object]) -> None:
