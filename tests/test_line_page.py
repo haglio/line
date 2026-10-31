@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from app_support.integration_runs import RunRecord, read_runs, write_run
 from app_support.win32 import process_started
-from shared_ui.icons_svg import svg_mark
+from shared_ui.icons_svg import svg_icon
 
 from line import line_page
 
@@ -108,7 +108,7 @@ def _one_run_of(kind: str) -> str:
     (line_page.MEASURING, "jigsaw"),
 ])
 def test_each_kind_of_run_wears_the_familys_mark_for_it(kind, mark):
-    assert svg_mark(mark, size=line_page.ICON_H) in _icon(_one_run_of(kind), kind.replace(" ", "-"))
+    assert svg_icon(mark, size=line_page.ICON_H) in _icon(_one_run_of(kind), kind.replace(" ", "-"))
 
 
 def test_icons_of_runs_that_start_close_together_in_one_row_spread_apart_instead_of_overlapping():
@@ -709,7 +709,7 @@ def test_the_legend_starts_with_currently_running():
     going = re.search(r"<span class='swatch going'></span><span class='icon going'>(<svg .*?</svg>)</span> ([^<]*)</span>",
                       page)
     assert (swatches[0], *going.groups()) == (
-        "going", svg_mark("disc", size=line_page.VERDICT_MARK_H), "Currently running")
+        "going", svg_icon("disc", size=line_page.VERDICT_MARK_H), "Currently running")
 
 
 def test_a_run_not_yet_ended_says_currently_running_once_it_has_the_machine_and_waiting_in_line_before():
