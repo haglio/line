@@ -752,3 +752,13 @@ def test_a_short_runs_bar_never_reaches_into_the_next_runs_bar():
                   re.findall(r"<rect class=ran x=([\d.]+) y=[\d.]+ width=([\d.]+)", page))
     (quick_left, quick_width), (after_left, _) = bars
     assert quick_left + quick_width <= after_left + 0.05
+
+
+def test_a_run_is_in_view_from_its_end_or_while_it_goes_on():
+    now = datetime(2026, 10, 30, 12, 0, tzinfo=UTC)
+    since = now - timedelta(hours=4)
+    ended_before = line_page.Run("a", "b", joined=since - timedelta(hours=2), ended=since - timedelta(minutes=1))
+    ended_after = line_page.Run("a", "b", joined=since - timedelta(hours=2), ended=since + timedelta(minutes=1))
+    still_going = line_page.Run("a", "b", joined=since - timedelta(hours=9))
+
+    assert [run.in_view(since, now) for run in (ended_before, ended_after, still_going)] == [False, True, True]
