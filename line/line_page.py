@@ -94,6 +94,9 @@ class Run:
     def holding(self) -> bool:
         return self.ended is None and self.got_the_machine is not None
 
+    def in_view(self, since: datetime, now: datetime) -> bool:
+        return (self.ended or now) >= since
+
     def waited_s(self, now: datetime) -> float:
         return ((self.got_the_machine or now) - self.joined).total_seconds()
 
@@ -412,7 +415,7 @@ def _row_name(row: str, middle: float, place: int | None) -> Iterator[str]:
 
 def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
     since = now - timedelta(hours=hours)
-    shown = [run for run in runs if (run.ended or now) >= since]
+    shown = [run for run in runs if run.in_view(since, now)]
     row_of = {id(run): row_name(run, rows.sessions.names) for run in shown}
     runs_by_row = {row: [run for run in shown if row_of[id(run)] == row] for row in rows.order
                    if row in row_of.values()}
@@ -728,7 +731,7 @@ def write_the_page(page: Path, days: int, refresh_s: int | None) -> None:
     since = now - timedelta(days=days)
     checkout = fun_time()
     runs = [run for run in runs_from(integration_runs.read_runs(integration_runs.runs_dir(checkout)))
-            if (run.ended or now) >= since]
+            if run.in_view(since, now)]
     names = session_names(PROJECTS, checkout / ".claude" / "worktrees", [run.checkout for run in runs],
                           [run.session for run in runs])
     page.parent.mkdir(parents=True, exist_ok=True)
