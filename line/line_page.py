@@ -14,7 +14,7 @@ from pathlib import Path
 from app_support import haglio_settings, integration_runs, siblings
 from app_support.file_channel import write_whole
 from app_support.integration_runs import RunRecord
-from shared_ui.icons_svg import svg_mark
+from shared_ui.icons_svg import svg_icon
 from shared_ui.palette import (
     AMBER,
     BG_KEYCAP,
@@ -255,7 +255,7 @@ KIND_MARKS = {ALL: "grid", CHANGED: "cells_in_circle", NAMED: "pair_in_circle",
 
 
 def kind_mark(kind: str) -> str:
-    return svg_mark(KIND_MARKS[kind], size=ICON_H)
+    return svg_icon(KIND_MARKS[kind], size=ICON_H)
 
 
 ICON_GAP = GAP_SMALL
@@ -494,7 +494,7 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
                      "</figure>" for hours in PERIODS_H)
     legend = "".join(f"<span class=key><span class='swatch {verdict.replace(' ', '-')}'></span>"
                      f"<span class='icon {verdict.replace(' ', '-')}'>"
-                     f"{svg_mark(VERDICT_MARKS[verdict], size=VERDICT_MARK_H)}</span> {word}</span>"
+                     f"{svg_icon(VERDICT_MARKS[verdict], size=VERDICT_MARK_H)}</span> {word}</span>"
                      for verdict, word in VERDICT_WORDS.items())
     kinds = "".join(f"<span class=key{_kind_tip(kind)}><span class='icon {kind.replace(' ', '-')} key-ink'>"
                     f"{kind_mark(kind)}</span>{words}</span>" for kind, words in KIND_WORDS.items())
