@@ -9,7 +9,7 @@ from pathlib import Path
 
 import PyQt6
 import pytest
-from app_support import production_update
+from app_support.testing import start_again_stand_in, update_waiting_for
 from PyQt6.QtCore import QEvent, QLibraryInfo, Qt, QUrl
 from PyQt6.QtGui import QIcon
 from PyQt6.QtTest import QSignalSpy
@@ -212,14 +212,11 @@ class _Window:
 
 
 @pytest.fixture
-def an_update_waiting(monkeypatch):
+def an_update_waiting():
     events = []
-    monkeypatch.setattr(production_update, "UP_BEFORE_AN_UPDATE_S", 0.0)
-    monkeypatch.setattr(production_update, "waits_for_programs_to_close",
-                        lambda checkout: checkout == line_tray.CHECKOUT)
-    monkeypatch.setattr(production_update, "start_again_after",
-                        lambda pid, launcher: events.append((pid, launcher)))
-    return events
+    with update_waiting_for(line_tray.CHECKOUT), \
+            start_again_stand_in(side_effect=lambda pid, launcher: events.append((pid, launcher))):
+        yield events
 
 
 def test_an_update_waiting_for_line_starts_it_again_in_the_tray_once_its_window_is_closed(an_update_waiting):

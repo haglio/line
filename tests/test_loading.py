@@ -3,9 +3,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import patch
 
-from shared_ui import loading_process
+from shared_ui.testing import loading_process_opened
 
 from line import line_tray
 
@@ -14,7 +13,8 @@ import json, sys
 from pathlib import Path
 from unittest.mock import patch
 from PyQt6.QtCore import QTimer
-from shared_ui.loading_window import Loading, LoadingCanceled
+from shared_ui.loading_window import LoadingCanceled
+from shared_ui.testing import loading_at_the_click
 from line import line_tray
 
 events = []
@@ -36,7 +36,7 @@ def shown(window):
     events.append("window shown")
     QTimer.singleShot(0, app.quit)
 
-with patch.object(Loading, "at_the_click", return_value=Recording()), patch.object(line_tray.LineWindow, "show", shown):
+with loading_at_the_click(Recording()), patch.object(line_tray.LineWindow, "show", shown):
     code = line_tray.run_the_tray(app, copy, open_now=True)
 (Path(sys.argv[2]) / "events.json").write_text(json.dumps(events), encoding="utf-8")
 sys.exit(code)
@@ -63,7 +63,7 @@ def test_esc_on_the_loading_screen_ends_the_start_before_any_window_opens(tmp_pa
 def test_the_loading_screen_runs_in_a_process_of_its_own_wearing_lines_taskbar_button():
     copy = line_tray.this_copy(None)
 
-    with patch.object(loading_process.LoadingProcess, "open") as opened:
+    with loading_process_opened() as opened:
         line_tray.open_the_loading_screen(copy)
 
     opened.assert_called_once_with(
