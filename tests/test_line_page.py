@@ -368,14 +368,14 @@ def _chart(page: str, hours: int) -> str:
 
 
 def _rows(chart: str) -> list[str]:
-    return re.findall(r"<text class=lane [^>]*>([^<]*)", chart)
+    return re.findall(r"<text class=row-name [^>]*>([^<]*)", chart)
 
 
 def _places(chart: str) -> list[str]:
     return re.findall(r"<text class=place [^>]*>(\d+)</text>", chart)
 
 
-def test_a_run_that_joins_while_another_of_its_sessions_runs_is_going_gets_a_timeline_of_its_own():
+def test_a_run_that_joins_while_another_of_its_sessions_runs_is_going_gets_a_subrow_of_its_own():
     running = line_page.Run("crown colors", "the whole suite", minute(0), minute(20), exit_code=0,
                             got_the_machine=minute(0))
     joined_meanwhile = line_page.Run("crown colors", "the crown tests", minute(10), minute(40), exit_code=0,
@@ -386,7 +386,7 @@ def test_a_run_that_joins_while_another_of_its_sessions_runs_is_going_gets_a_tim
     chart = _chart(line_page.render([], [running, joined_meanwhile, afterwards], now=minute(60)), hours=1)
 
     [first, second, third] = sorted(_bars(chart))
-    assert second[1] - first[1] == line_page.LANE_H
+    assert second[1] - first[1] == line_page.SUBROW_H
     assert third[1] == first[1]
     assert _rows(chart) == ["crown colors"]
 
@@ -400,7 +400,7 @@ def _two_runs_of_one_session_at_once_and_another_sessions_run() -> list[line_pag
                           got_the_machine=minute(41))]
 
 
-def test_a_sessions_timelines_sit_closer_together_than_two_sessions_rows():
+def test_a_sessions_subrows_sit_closer_together_than_two_sessions_rows():
     chart = _chart(line_page.render([], _two_runs_of_one_session_at_once_and_another_sessions_run(), now=minute(60)),
                    hours=1)
 
@@ -408,7 +408,7 @@ def test_a_sessions_timelines_sit_closer_together_than_two_sessions_rows():
     assert abs(meanwhile_y - running_y) < min(abs(other_sessions_y - running_y), abs(other_sessions_y - meanwhile_y))
 
 
-def test_a_bracket_joins_a_sessions_timelines_to_its_name_and_a_session_with_one_timeline_has_none():
+def test_a_bracket_joins_a_sessions_subrows_to_its_name_and_a_session_with_one_subrow_has_none():
     chart = _chart(line_page.render([], _two_runs_of_one_session_at_once_and_another_sessions_run(), now=minute(60)),
                    hours=1)
 
@@ -423,7 +423,7 @@ def test_a_bracket_joins_a_sessions_timelines_to_its_name_and_a_session_with_one
     assert bar_x > line_page.LABEL_W - 10
 
 
-def test_a_sessions_name_and_place_in_line_sit_at_the_middle_of_its_timelines():
+def test_a_sessions_name_and_place_in_line_sit_at_the_middle_of_its_subrows():
     running = line_page.Run("crown colors", "the whole suite", minute(30), got_the_machine=minute(30))
     waiting = line_page.Run("crown colors", "the crown tests", minute(40))
     alone = line_page.Run("quit faster", "the whole suite", minute(0), minute(20), exit_code=0,
@@ -431,7 +431,7 @@ def test_a_sessions_name_and_place_in_line_sit_at_the_middle_of_its_timelines():
 
     chart = _chart(line_page.render([running, waiting], [running, waiting, alone], now=minute(60)), hours=1)
 
-    label_y = dict(zip(_rows(chart), (float(y) for y in re.findall(r"<text class=lane x=[\d.]+ y=([\d.]+)>", chart)),
+    label_y = dict(zip(_rows(chart), (float(y) for y in re.findall(r"<text class=row-name x=[\d.]+ y=([\d.]+)>", chart)),
                        strict=True))
     [place_y] = [float(y) for y in re.findall(r"<text class=place x=[\d.]+ y=([\d.]+)>", chart)]
     joining_y, joining_height = map(float, re.search(r"<g class=bracket><rect x=[\d.]+ y=([\d.]+) width=[\d.]+ "
@@ -441,7 +441,7 @@ def test_a_sessions_name_and_place_in_line_sit_at_the_middle_of_its_timelines():
     assert label_y["crown colors"] == place_y == pytest.approx(joining_y + joining_height / 2 + below_the_middle)
 
 
-def test_a_sessions_dotted_line_runs_along_each_of_its_timelines():
+def test_a_sessions_dotted_line_runs_along_each_of_its_subrows():
     *crown, other = _two_runs_of_one_session_at_once_and_another_sessions_run()
     crown = [replace(run, session="5e55-10n") for run in crown]
     spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(55))}
@@ -454,12 +454,12 @@ def test_a_sessions_dotted_line_runs_along_each_of_its_timelines():
     assert dots == pytest.approx(sorted(y + height / 2 for _, y, height in sorted(_bars(chart))[:2]))
 
 
-def test_each_timelines_icons_sit_under_its_own_bars():
+def test_each_subrows_icons_sit_under_its_own_bars():
     chart = _chart(line_page.render([], _two_runs_of_one_session_at_once_and_another_sessions_run(), now=minute(60)),
                    hours=1)
 
     by_start = zip(sorted(_bars(chart)), sorted(_icons(chart), key=lambda icon: icon[1]), strict=True)
-    assert all(bar_y + bar_height <= icon_y < bar_y + line_page.LANE_H
+    assert all(bar_y + bar_height <= icon_y < bar_y + line_page.SUBROW_H
                for (_, bar_y, bar_height), (_, _, icon_y) in by_start)
 
 
@@ -587,7 +587,7 @@ def test_the_main_verifiers_row_says_it_runs_the_whole_suite_on_each_change_that
 
     chart = _chart(line_page.render([], [verifier], now=T0 + timedelta(hours=1)), hours=4)
 
-    row = re.search(r"<text class=lane [^>]*>MAIN VERIFIER<title>([^<]*)</title></text>", chart)
+    row = re.search(r"<text class=row-name [^>]*>MAIN VERIFIER<title>([^<]*)</title></text>", chart)
     assert row
     assert "whole integration suite" in row[1]
 
@@ -651,7 +651,7 @@ def test_a_long_row_name_is_shortened_to_fit_beside_its_number_and_shown_whole_w
     chart = _chart(line_page.render([run], [run], now=T0 + timedelta(minutes=5),
                                     sessions=line_page.Sessions(names={"5e55-10n": long_name})), hours=4)
 
-    shown, whole = re.search(r"<text class=lane [^>]*>([^<]*)<title>([^<]*)</title>", chart).groups()
+    shown, whole = re.search(r"<text class=row-name [^>]*>([^<]*)<title>([^<]*)</title>", chart).groups()
     assert shown.endswith("…")
     assert len(shown) <= line_page.LABEL_CHARS
     assert whole == long_name
