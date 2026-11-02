@@ -50,26 +50,31 @@
     },
     {
       "screen": null,
-      "his_word": null,
-      "code_word": null,
+      "his_word": "row (2026-11-02)",
+      "code_word": "row",
       "id": "chart_row",
       "thing": "one horizontal stretch of the chart, with a session's name at its left and its runs' bars to the right",
       "code_today": [
         "row"
       ],
-      "status": "unruled"
+      "status": "ruled",
+      "ruled": "2026-11-02, his words on this list"
     },
     {
       "screen": null,
-      "his_word": null,
-      "code_word": null,
-      "id": "row_second_line",
+      "his_word": "subrow (2026-11-02)",
+      "code_word": "subrow",
+      "id": "subrow",
       "thing": "one of the lines a row splits into when a session's runs overlap, one above the other",
       "code_today": [
+        "subrow"
+      ],
+      "status": "ruled",
+      "ruled": "2026-11-02, his words on this list",
+      "retired": [
         "lane",
         "timeline"
-      ],
-      "status": "unruled"
+      ]
     },
     {
       "screen": [

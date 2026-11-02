@@ -180,7 +180,7 @@ def _tip(head: str, lines: list[str]) -> str:
 
 BARS_H = 30
 ICON_SPACE_H = 36
-LANE_H = BARS_H + ICON_SPACE_H
+SUBROW_H = BARS_H + ICON_SPACE_H
 ROW_GAP = GAP_DIALOG
 RAN_H = 20
 WAITED_H = 8
@@ -343,15 +343,15 @@ def _times(now: datetime, hours: int) -> str:
     return f"<svg viewBox='0 0 {LABEL_W + CHART_W + RIGHT_MARGIN} {TIMES_H}' aria-hidden=true>{labels}</svg>"
 
 
-def _timelines(runs: list[Run], now: datetime) -> list[list[Run]]:
-    timelines: list[list[Run]] = []
+def _subrows(runs: list[Run], now: datetime) -> list[list[Run]]:
+    subrows: list[list[Run]] = []
     for run in sorted(runs, key=lambda run: run.joined):
-        free = next((timeline for timeline in timelines if (timeline[-1].ended or now) <= run.joined), None)
+        free = next((subrow for subrow in subrows if (subrow[-1].ended or now) <= run.joined), None)
         if free is None:
-            timelines.append([run])
+            subrows.append([run])
         else:
             free.append(run)
-    return timelines
+    return subrows
 
 
 def _bracket(middles: list[float]) -> str:
@@ -375,10 +375,10 @@ def _layout(runs_by_row: dict[str, list[Run]], now: datetime) -> Layout:
     for row, runs in runs_by_row.items():
         top += ROW_GAP if middles else 0
         middles[row] = []
-        for timeline in _timelines(runs, now):
+        for subrow in _subrows(runs, now):
             middles[row].append(top + BARS_H / 2)
-            top_of.update((id(run), top) for run in timeline)
-            top += LANE_H
+            top_of.update((id(run), top) for run in subrow)
+            top += SUBROW_H
     return Layout(middles, top_of, top)
 
 
@@ -398,7 +398,7 @@ def _row_name(row: str, middle: float, place: int | None) -> Iterator[str]:
     fitted = row if len(row) <= LABEL_CHARS else row[:LABEL_CHARS - 1].rstrip() + "…"
     note = ROW_NOTES.get(row) or (row if fitted != row else "")
     title = f"<title>{_e(note)}</title>" if note else ""
-    yield f"<text class=lane x={LABEL_W - 10} y={middle + 4.5}>{_e(fitted)}{title}</text>"
+    yield f"<text class=row-name x={LABEL_W - 10} y={middle + 4.5}>{_e(fitted)}{title}</text>"
 
 
 def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
@@ -426,7 +426,7 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         if lifetime is not None:
             parts.extend(_session_dots(lifetime, middles, x, now, hours))
         parts.extend(_row_name(row, (middles[0] + middles[-1]) / 2, rows.places.get(row)))
-    icons_by_lane: dict[float, list[RunIcon]] = {}
+    icons_by_subrow: dict[float, list[RunIcon]] = {}
     bars: list[str] = []
     for run in shown:
         top = layout.top_of[id(run)]
@@ -449,9 +449,9 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         if run.got_the_machine:
             bars.append(f"{group}<rect class=ran x={split:.1f} y={middle - RAN_H / 2} "
                         f"width={held_width(split, end):.1f} height={RAN_H} rx={RAN_RX}></rect></g>")
-        icons_by_lane.setdefault(top, []).append(RunIcon(split, run.kind, _state(run)))
+        icons_by_subrow.setdefault(top, []).append(RunIcon(split, run.kind, _state(run)))
     parts.extend(bars)
-    for top, icons in icons_by_lane.items():
+    for top, icons in icons_by_subrow.items():
         parts.extend(_run_icons(top, icons))
     parts.append(f"<rect class=now x={x(now) - 0.75:.2f} y=0 width=1.5 height={layout.height}></rect>")
     dots = (f"<defs><pattern id=dots-{hours} width={DOT_EVERY} height={SESSION_H} patternUnits=userSpaceOnUse>"
@@ -526,7 +526,7 @@ main {{ max-width:1140px; margin:0 auto }}
 .period {{ margin:0 }} .period svg {{ display:block; width:100%; min-width:760px; height:auto }}
 .grid {{ fill:var(--grid) }} .now {{ fill:var(--ink) }}
 .tick {{ fill:var(--muted); font-size:{in_pixels(SIZE_SMALL)}px; text-anchor:middle }}
-.lane {{ fill:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px; text-anchor:end }}
+.row-name {{ fill:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px; text-anchor:end }}
 .place {{ fill:var(--ink); font-size:{in_pixels(SIZE_SMALL)}px; font-weight:bold; text-anchor:end }}
 .bracket {{ fill:var(--ink2) }}
 .run .hit {{ fill:transparent }} .run .waited {{ fill:var(--waiting) }}
