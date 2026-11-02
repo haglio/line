@@ -468,6 +468,25 @@ def _quitting(events: list[str], *, preview: bool) -> line_tray.Quitting:
                               hand_back=lambda: events.append("handed back"))
 
 
+def test_a_preview_hands_the_work_back_when_its_hour_is_up():
+    events, asked = [], []
+
+    _quitting(events, preview=True).hand_back_after_the_hour(lambda ms, then: asked.append((ms, then)))
+
+    [(ms, then)] = asked
+    assert ms == line_tray.HAND_BACK_AFTER_MINUTES * 60_000
+    then()
+    assert events == ["handed back", "quit"]
+
+
+def test_the_line_he_uses_never_hands_anything_back():
+    asked = []
+
+    _quitting([], preview=False).hand_back_after_the_hour(lambda ms, then: asked.append((ms, then)))
+
+    assert asked == []
+
+
 def test_quit_from_the_tray_menu_is_written_down_and_quits_the_line_he_uses(caplog):
     caplog.set_level(logging.INFO, logger="line")
     events = []

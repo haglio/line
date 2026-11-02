@@ -236,6 +236,10 @@ class Quitting:
         _log.info("another copy of Line took over")
         self._quit_line()
 
+    def hand_back_after_the_hour(self, after_ms: Callable[[int, Callable[[], object]], object]) -> None:
+        if self._preview:
+            after_ms(HAND_BACK_AFTER_MINUTES * 60_000, self.and_hand_back)
+
     def and_hand_back(self) -> None:
         _log.info("handing back to the Line he uses")
         self._hand_back()
@@ -389,11 +393,7 @@ def run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
         lambda reason: open_asked("a click on the tray icon")
         if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
     tray.show()
-    handing_back = QTimer()
-    if copy.preview is not None:
-        handing_back.setSingleShot(True)
-        handing_back.timeout.connect(quitting.and_hand_back)
-        handing_back.start(HAND_BACK_AFTER_MINUTES * 60_000)
+    quitting.hand_back_after_the_hour(QTimer.singleShot)
     timer = QTimer()
     timer.timeout.connect(window.refresh)
     timer.start(line_page.WATCH_EVERY_S * 1000)
