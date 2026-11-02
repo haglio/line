@@ -28,5 +28,10 @@
   "statements": {
     "line/line_page.py": 428,
     "line/line_tray.py": 303
+  },
+  "uncovered_lines": {
+    "line/__main__.py": 3,
+    "line/line_page.py": 25,
+    "line/line_tray.py": 85
   }
 }
