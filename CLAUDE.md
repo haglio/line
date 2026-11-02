@@ -9,6 +9,8 @@ Shared rules are in the global `~/.claude/CLAUDE.md`. This file contains only Li
 - Line is his tray app for Fun Time's integration line: who holds the machine, who waits, and how each run ended. `line/line_tray.py` is the tray and its window; `line/line_page.py` writes the page the window shows.
 - It shows the runs Fun Time writes down in its production checkout's `state/integration_runs/` (the format is `app_support.integration_runs`), all but a run stopped before its turn, which never ran, and names each row from the Claude transcripts under `~/.claude/projects`. It never looks at running programs to find a run. It writes only into its own checkout's `state/`: the page, what the page remembers, and its log.
 
+- **`glossary.json` lists the things on this app's screen and their words, and `tests/test_glossary.py` holds the code to it.** A noun for a drawn thing is a row there before it is a word in the code; a rename moves the old word from the row's `code_today` to its `retired`.
+
 ## Test commands
 
 ```bash

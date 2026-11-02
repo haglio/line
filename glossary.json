@@ -1,0 +1,156 @@
+{
+  "app": "Line",
+  "drafted": "2026-11-02",
+  "columns": {
+    "thing": "where it is on the screen and what it looks like",
+    "screen": "the words on the screen that name it (a label, a button, a tooltip), quoted; null when no label names it",
+    "his_word": "the word the user says for it, from his own messages and the spoken commands; null when he has none yet",
+    "code_today": "the words the code says for it now; each has to be in the code, or the row is stale",
+    "code_word": "the one word the code is to say for it; null while unruled",
+    "status": "ruled: his word, given where `ruled` says | his_word: a word he has used, not yet put to him as the code's | agreed: screen, user and code already say one word | unruled: no word of his yet, the row waits for him | kept: a name from outside this app, or a thing he has no word for, so the code keeps its own",
+    "retired": "code words for it that are gone and stay gone; `keep` lists the tokens that may still carry the letters (another thing's name)"
+  },
+  "things": [
+    {
+      "screen": [
+        "Line"
+      ],
+      "his_word": "Line",
+      "code_word": "line",
+      "id": "line_app",
+      "thing": "this app: the window showing Fun Time's integration line, with an icon in the tray",
+      "code_today": [
+        "line"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": null,
+      "his_word": "run",
+      "code_word": "run",
+      "id": "run",
+      "thing": "one test run, drawn as a bar on the chart",
+      "code_today": [
+        "run"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": [
+        "Session"
+      ],
+      "his_word": "session",
+      "code_word": "session",
+      "id": "session",
+      "thing": "the Claude session a run belongs to, its dotted line on the chart",
+      "code_today": [
+        "session"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": null,
+      "his_word": null,
+      "code_word": null,
+      "id": "chart_row",
+      "thing": "one horizontal stretch of the chart, with a session's name at its left and its runs' bars to the right",
+      "code_today": [
+        "row"
+      ],
+      "status": "unruled"
+    },
+    {
+      "screen": null,
+      "his_word": null,
+      "code_word": null,
+      "id": "row_second_line",
+      "thing": "one of the lines a row splits into when a session's runs overlap, one above the other",
+      "code_today": [
+        "lane",
+        "timeline"
+      ],
+      "status": "unruled"
+    },
+    {
+      "screen": [
+        "Waiting in line"
+      ],
+      "his_word": null,
+      "code_word": "waiting in line",
+      "id": "waiting_in_line",
+      "thing": "the part of a bar before the run got the machine",
+      "code_today": [
+        "waiting in line"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": [
+        "Relevance map",
+        "Update relevance map"
+      ],
+      "his_word": null,
+      "code_word": "relevance map",
+      "id": "relevance_map",
+      "thing": "what the Update relevance map runs refresh",
+      "code_today": [
+        "relevance map"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": null,
+      "his_word": "icon (2026-10-16)",
+      "code_word": "icon",
+      "id": "run_icon",
+      "thing": "the small picture below a bar that says what kind of run it was",
+      "code_today": [
+        "run icon"
+      ],
+      "status": "ruled",
+      "ruled": "2026-10-16, his words, for the whole family: icon, never mark or glyph",
+      "retired": [
+        "gutter",
+        "kind mark",
+        "verdict mark"
+      ]
+    },
+    {
+      "screen": null,
+      "his_word": null,
+      "code_word": "key color",
+      "id": "key_color",
+      "thing": "the small block of color beside each word along the top of the chart",
+      "code_today": [
+        "key"
+      ],
+      "status": "kept",
+      "retired": [
+        "swatch"
+      ]
+    },
+    {
+      "screen": null,
+      "his_word": "tray (2026-09-28, 2026-10-11)",
+      "code_word": "tray",
+      "id": "tray",
+      "thing": "Windows' notification area, and Line's icon and menu in it",
+      "code_today": [
+        "tray"
+      ],
+      "status": "kept",
+      "ruled": "Windows' own word"
+    },
+    {
+      "screen": null,
+      "his_word": "preview",
+      "code_word": "preview",
+      "id": "preview",
+      "thing": "a branch's copy of Line, run in place of production while he tries it",
+      "code_today": [
+        "preview"
+      ],
+      "status": "agreed"
+    }
+  ]
+}
