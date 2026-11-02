@@ -80,7 +80,7 @@ def _icons(chart: str) -> list[tuple[str, float, float]]:
             re.findall(r"<g class='icon ([\w-]+) [\w-]+' transform='translate\(([\d.]+),([\d.]+)\)'", chart)]
 
 
-def test_a_runs_icon_sits_in_the_gutter_under_its_rows_bars_where_its_bar_starts():
+def test_a_runs_icon_sits_under_its_rows_bars_where_its_bar_starts():
     run = line_page.Run("crown colors", "the crown tests", minute(0), minute(20), exit_code=0,
                         got_the_machine=minute(5), short=True, kind=line_page.NAMED)
 
@@ -241,19 +241,19 @@ def test_the_legend_names_the_dotted_line_session_shows_three_dots_or_more_and_s
 
     page = line_page.render([], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans))
 
-    tip = re.search(r"<span class=key data-tip='([^']*)'><span class='swatch session-key'></span>Session</span>", page)[1]
+    tip = re.search(r"<span class=key data-tip='([^']*)'><span class='key-color session-key'></span>Session</span>", page)[1]
     assert "spawned" in tip
     assert "archived" in tip
-    dots = _css_units(".swatch.session-key", "width") / line_page.DOT_EVERY
+    dots = _css_units(".key-color.session-key", "width") / line_page.DOT_EVERY
     assert dots >= len("...")
     when = re.search(r"<rect class=session [^>]*><title>([^<]*)</title></rect>", _chart(page, hours=1))[1]
     assert when == f"Session spawned {line_page._clock(minute(0))}, archived {line_page._clock(minute(30))}"
 
 
 def test_the_legends_bars_dots_and_icons_are_drawn_the_size_the_chart_draws_them():
-    assert _css_units(".swatch", "height") == line_page.RAN_H
-    assert _css_units(".swatch.waited-key", "height") == line_page.WAITED_H
-    assert _css_units(".swatch.session-key", "height") == line_page.SESSION_H
+    assert _css_units(".key-color", "height") == line_page.RAN_H
+    assert _css_units(".key-color.waited-key", "height") == line_page.WAITED_H
+    assert _css_units(".key-color.session-key", "height") == line_page.SESSION_H
     assert _css_units(".kinds svg", "height") == line_page.ICON_H
     assert "--unit" in line_page.SCRIPT
     assert "viewBox.baseVal.width" in line_page.SCRIPT
@@ -454,7 +454,7 @@ def test_a_sessions_dotted_line_runs_along_each_of_its_timelines():
     assert dots == pytest.approx(sorted(y + height / 2 for _, y, height in sorted(_bars(chart))[:2]))
 
 
-def test_each_timelines_icons_sit_in_the_gutter_under_its_own_bars():
+def test_each_timelines_icons_sit_under_its_own_bars():
     chart = _chart(line_page.render([], _two_runs_of_one_session_at_once_and_another_sessions_run(), now=minute(60)),
                    hours=1)
 
@@ -705,10 +705,10 @@ def test_the_page_is_dark_whatever_the_system_prefers():
 def test_the_legend_starts_with_currently_running():
     page = line_page.render([], [], now=T0)
 
-    swatches = re.findall(r"<span class=key><span class='swatch ([^']+)'></span>", page)
-    going = re.search(r"<span class='swatch going'></span><span class='icon going'>(<svg .*?</svg>)</span> ([^<]*)</span>",
+    key_colors = re.findall(r"<span class=key><span class='key-color ([^']+)'></span>", page)
+    going = re.search(r"<span class='key-color going'></span><span class='icon going'>(<svg .*?</svg>)</span> ([^<]*)</span>",
                       page)
-    assert (swatches[0], *going.groups()) == (
+    assert (key_colors[0], *going.groups()) == (
         "going", svg_icon("disc", size=line_page.VERDICT_ICON_H), "Currently running")
 
 

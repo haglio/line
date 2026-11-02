@@ -179,8 +179,8 @@ def _tip(head: str, lines: list[str]) -> str:
 
 
 BARS_H = 30
-GUTTER_H = 36
-LANE_H = BARS_H + GUTTER_H
+ICON_SPACE_H = 36
+LANE_H = BARS_H + ICON_SPACE_H
 ROW_GAP = GAP_DIALOG
 RAN_H = 20
 WAITED_H = 8
@@ -263,15 +263,15 @@ KIND_TIPS = {MEASURING: RELEVANCE, CHANGED: RELEVANCE,
 
 
 @dataclass(frozen=True)
-class GutterIcon:
+class RunIcon:
     anchor: float
     kind: str
     state: str
     left: float = 0.0
 
 
-def _one_icon_per_pile(icons: list[GutterIcon]) -> list[GutterIcon]:
-    piles: list[GutterIcon] = []
+def _one_icon_per_pile(icons: list[RunIcon]) -> list[RunIcon]:
+    piles: list[RunIcon] = []
     for icon in sorted(icons, key=lambda icon: icon.anchor):
         pile = piles[-1] if piles else None
         if pile and pile.kind == icon.kind and icon.anchor < pile.anchor + ICON_H + ICON_GAP:
@@ -281,20 +281,20 @@ def _one_icon_per_pile(icons: list[GutterIcon]) -> list[GutterIcon]:
     return piles
 
 
-def _spread_apart(icons: list[GutterIcon], right_edge: float) -> list[GutterIcon]:
-    placed: list[GutterIcon] = []
+def _spread_apart(icons: list[RunIcon], right_edge: float) -> list[RunIcon]:
+    placed: list[RunIcon] = []
     for icon in _one_icon_per_pile(icons):
         after_the_last = placed[-1].left + ICON_H + ICON_GAP if placed else icon.anchor
         placed.append(replace(icon, left=max(icon.anchor, after_the_last)))
-    pulled_in: list[GutterIcon] = []
+    pulled_in: list[RunIcon] = []
     for icon in reversed(placed):
         pulled_in.append(replace(icon, left=min(icon.left, right_edge - ICON_H)))
         right_edge = pulled_in[-1].left - ICON_GAP
     return pulled_in[::-1]
 
 
-def _gutter(top: float, icons: list[GutterIcon]) -> Iterator[str]:
-    bars_bottom, icon_top = top + BARS_H / 2 + RAN_H / 2, top + BARS_H + (GUTTER_H - ICON_H) / 2
+def _run_icons(top: float, icons: list[RunIcon]) -> Iterator[str]:
+    bars_bottom, icon_top = top + BARS_H / 2 + RAN_H / 2, top + BARS_H + (ICON_SPACE_H - ICON_H) / 2
     for icon in _spread_apart(icons, LABEL_W + CHART_W + RIGHT_MARGIN):
         state, half = icon.state.replace(" ", "-"), STEM_W / 2
         yield (f"<polygon class='stem {state}' points='{icon.anchor - half:.1f},{bars_bottom} "
@@ -426,7 +426,7 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         if lifetime is not None:
             parts.extend(_session_dots(lifetime, middles, x, now, hours))
         parts.extend(_row_name(row, (middles[0] + middles[-1]) / 2, rows.places.get(row)))
-    icons_by_lane: dict[float, list[GutterIcon]] = {}
+    icons_by_lane: dict[float, list[RunIcon]] = {}
     bars: list[str] = []
     for run in shown:
         top = layout.top_of[id(run)]
@@ -449,10 +449,10 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         if run.got_the_machine:
             bars.append(f"{group}<rect class=ran x={split:.1f} y={middle - RAN_H / 2} "
                         f"width={held_width(split, end):.1f} height={RAN_H} rx={RAN_RX}></rect></g>")
-        icons_by_lane.setdefault(top, []).append(GutterIcon(split, run.kind, _state(run)))
+        icons_by_lane.setdefault(top, []).append(RunIcon(split, run.kind, _state(run)))
     parts.extend(bars)
     for top, icons in icons_by_lane.items():
-        parts.extend(_gutter(top, icons))
+        parts.extend(_run_icons(top, icons))
     parts.append(f"<rect class=now x={x(now) - 0.75:.2f} y=0 width=1.5 height={layout.height}></rect>")
     dots = (f"<defs><pattern id=dots-{hours} width={DOT_EVERY} height={SESSION_H} patternUnits=userSpaceOnUse>"
             f"<circle class=dot cx={DOT_EVERY / 2} cy={SESSION_H / 2} r={SESSION_H / 2}></circle></pattern></defs>")
@@ -483,15 +483,15 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
                     for hours in PERIODS_H)
     charts = "".join(f"<figure class=period data-hours={hours}{shown_first(hours)}>{_chart(runs, now, hours, rows)}"
                      "</figure>" for hours in PERIODS_H)
-    legend = "".join(f"<span class=key><span class='swatch {verdict.replace(' ', '-')}'></span>"
+    legend = "".join(f"<span class=key><span class='key-color {verdict.replace(' ', '-')}'></span>"
                      f"<span class='icon {verdict.replace(' ', '-')}'>"
                      f"{svg_icon(VERDICT_ICONS[verdict], size=VERDICT_ICON_H)}</span> {word}</span>"
                      for verdict, word in VERDICT_WORDS.items())
     kinds = "".join(f"<span class=key{_kind_tip(kind)}><span class='icon {kind.replace(' ', '-')} key-ink'>"
                     f"{kind_icon(kind)}</span>{words}</span>" for kind, words in KIND_WORDS.items())
     return (f"<div class=frozen><div class=chart-head><div class=legend>{legend}<span class=key>"
-            f"<span class='swatch waited-key'></span>{WAITING_IN_LINE}</span><span class=key data-tip='{SESSION_TIP}'>"
-            f"<span class='swatch session-key'></span>Session</span></div>"
+            f"<span class='key-color waited-key'></span>{WAITING_IN_LINE}</span><span class=key data-tip='{SESSION_TIP}'>"
+            f"<span class='key-color session-key'></span>Session</span></div>"
             f"<div class=periods>{buttons}</div>"
             f"<div class=kinds>{kinds}</div></div>{times}</div>{charts}")
 
@@ -503,11 +503,11 @@ STYLE = f"""
   --border:{as_rgba(WHITE, 0.1)}; --passed:{as_hex(GREEN)}; --failed:{as_hex(RED)}; --noresult:{as_hex(YELLOW)};
   --going:{as_hex(BLUE)}; --pressed:{as_hex(BG_SECONDARY)}; --shadow:{as_rgba(BLACK, 0.15)};
   --unit:.95px; color-scheme:dark }}
-.swatch {{ display:inline-block; width:calc({KEY_W} * var(--unit)); height:calc({RAN_H} * var(--unit));
+.key-color {{ display:inline-block; width:calc({KEY_W} * var(--unit)); height:calc({RAN_H} * var(--unit));
   border-radius:calc({RAN_RX} * var(--unit)) }}
-.swatch.waited-key {{ background:var(--waiting); height:calc({WAITED_H} * var(--unit));
+.key-color.waited-key {{ background:var(--waiting); height:calc({WAITED_H} * var(--unit));
   border-radius:calc({WAITED_H / 2} * var(--unit)) }}
-.swatch.session-key {{ width:calc({KEY_W} * var(--unit)); height:calc({SESSION_H} * var(--unit)); border-radius:0;
+.key-color.session-key {{ width:calc({KEY_W} * var(--unit)); height:calc({SESSION_H} * var(--unit)); border-radius:0;
   background:radial-gradient(circle, var(--muted) calc({SESSION_H / 2} * var(--unit)),
   transparent calc({SESSION_H / 2} * var(--unit) + .5px)) 0 0 / calc({DOT_EVERY} * var(--unit)) 100% }}
 .kinds svg {{ height:calc({ICON_H} * var(--unit)); width:auto }}
@@ -541,8 +541,8 @@ main {{ max-width:1140px; margin:0 auto }}
   font-size:{in_pixels(SIZE_SMALL)}px }}
 .kinds {{ flex-basis:100%; gap:{GAP_MEDIUM}px {GAP_DIALOG}px }}
 .key {{ display:inline-flex; align-items:center; gap:{GAP_MEDIUM}px }}
-.swatch.passed {{ background:var(--passed) }} .swatch.failed {{ background:var(--failed) }}
-.swatch.no-result {{ background:var(--noresult) }} .swatch.going {{ background:var(--going) }}
+.key-color.passed {{ background:var(--passed) }} .key-color.failed {{ background:var(--failed) }}
+.key-color.no-result {{ background:var(--noresult) }} .key-color.going {{ background:var(--going) }}
 pattern .dot {{ fill:var(--muted) }}
 #tip {{ position:fixed; z-index:2; pointer-events:none; background:var(--surface); color:var(--ink);
   border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px; padding:{GAP_MEDIUM}px;
