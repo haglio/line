@@ -24,6 +24,7 @@ from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWebEngineCore import QWebEngineProfile
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
+from shared_ui import running_copy
 from shared_ui.foreground import bring_to_front
 from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
@@ -265,36 +266,21 @@ class _PageWriter:
         self._running = subprocess.Popen(self._command(), **hidden_subprocess_kwargs())
 
 
-def serve_requests(name: str, *, open_line: Callable[[], object], quit_line: Callable[[], object]) -> QLocalServer:
-    server = QLocalServer()
-    QLocalServer.removeServer(name)
-    server.listen(name)
+_ASKING_PATIENCE_S = 2.5
 
-    def answer(connection: QLocalSocket) -> None:
-        request = bytes(connection.readAll())
+
+def serve_requests(name: str, *, open_line: Callable[[], object], quit_line: Callable[[], object]) -> QLocalServer:
+    def answer(request: bytes, _reply: Callable[[bytes], None]) -> None:
         if request == b"open":
             open_line()
         elif request == b"quit":
             quit_line()
 
-    def asked() -> None:
-        connection = server.nextPendingConnection()
-        connection.readyRead.connect(lambda: answer(connection))
-        connection.disconnected.connect(connection.deleteLater)
-
-    server.newConnection.connect(asked)
-    return server
+    return running_copy.listen(name, answer)
 
 
 def ask(name: str, request: bytes) -> bool:
-    asking = QLocalSocket()
-    asking.connectToServer(name)
-    if not asking.waitForConnected(500):
-        return False
-    asking.write(request)
-    asking.waitForBytesWritten(2000)
-    asking.disconnectFromServer()
-    return True
+    return running_copy.ask(name, request, until=time.monotonic() + _ASKING_PATIENCE_S) is not None
 
 
 def wait_until_gone(name: str, seconds: float = 15) -> bool:

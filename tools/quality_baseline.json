@@ -26,8 +26,7 @@
   },
   "simple_namespaces": {},
   "statements": {
-    "line/line_page.py": 408,
-    "line/line_tray.py": 302
+    "line/line_page.py": 408
   },
   "uncovered_lines": {
     "line/__main__.py": 3,
