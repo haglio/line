@@ -13,7 +13,17 @@ from pathlib import Path
 
 from app_support import haglio_settings, integration_runs, siblings
 from app_support.file_channel import write_whole
-from app_support.integration_runs import RunRecord
+from app_support.integration_runs import (
+    AGAIN,
+    ALL,
+    CHANGED,
+    MEASURING,
+    NAMED,
+    NO_FLAKES,
+    VERIFYING_MAIN,
+    RunRecord,
+    kind_of,
+)
 from shared_ui.icons_svg import svg_icon
 from shared_ui.palette import (
     BG_KEYCAP,
@@ -52,15 +62,6 @@ def who_of(branch: str) -> str:
 
 
 _TEST_FILE = re.compile(r"test_(\w+?)(?:_integration)?(?:\.py|\b)")
-ALL = "all"
-CHANGED = "changed"
-NAMED = "named"
-NO_FLAKES = "no flakes"
-AGAIN = "again"
-MEASURING = "measuring"
-REPEAT_CHANGED = "--repeat-changed"
-CHANGED_FLAG = "--changed"
-WITHOUT_COVERAGE = "--no-cov"
 
 
 def describe(args: list[str], kind: str) -> str:
@@ -113,19 +114,6 @@ class Run:
 
 
 VERIFIER = "main verifier"
-VERIFYING_MAIN = "verifying-main"
-
-
-def kind_of(record: RunRecord) -> str:
-    if record.what[:1] == [REPEAT_CHANGED]:
-        return NO_FLAKES
-    if not record.short:
-        return ALL
-    if record.what[:1] == [CHANGED_FLAG]:
-        return CHANGED
-    if record.checkout == VERIFYING_MAIN:
-        return MEASURING if WITHOUT_COVERAGE in record.what else AGAIN
-    return NAMED
 
 
 def runs_from(records: Iterable[RunRecord],
