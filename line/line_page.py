@@ -142,8 +142,8 @@ def the_line(runs: Iterable[Run]) -> list[Run]:
 
 
 VERDICT_WORDS = {"going": "Currently running", "passed": "Passed", "failed": "Failed", "no result": "No result"}
-VERDICT_MARKS = {"going": "disc", "passed": "check", "failed": "cross", "no result": "question"}
-VERDICT_MARK_H = 12
+VERDICT_ICONS = {"going": "disc", "passed": "check", "failed": "cross", "no result": "question"}
+VERDICT_ICON_H = 12
 WAITING_IN_LINE = "Waiting in line"
 WAITING = "waiting"
 
@@ -241,12 +241,12 @@ def _hours_words(hours: int) -> str:
     return "1 hour" if hours == 1 else f"{hours} hours"
 
 
-KIND_MARKS = {ALL: "grid", CHANGED: "cells_in_circle", NAMED: "pair_in_circle",
+KIND_ICONS = {ALL: "grid", CHANGED: "cells_in_circle", NAMED: "pair_in_circle",
               NO_FLAKES: "snowflake_struck_out", AGAIN: "warning", MEASURING: "jigsaw"}
 
 
-def kind_mark(kind: str) -> str:
-    return svg_icon(KIND_MARKS[kind], size=ICON_H)
+def kind_icon(kind: str) -> str:
+    return svg_icon(KIND_ICONS[kind], size=ICON_H)
 
 
 ICON_GAP = GAP_SMALL
@@ -300,7 +300,7 @@ def _gutter(top: float, icons: list[GutterIcon]) -> Iterator[str]:
         yield (f"<polygon class='stem {state}' points='{icon.anchor - half:.1f},{bars_bottom} "
                f"{icon.anchor + half:.1f},{bars_bottom} {icon.left + half:.1f},{icon_top} {icon.left - half:.1f},"
                f"{icon_top}'></polygon><g class='icon {icon.kind.replace(' ', '-')} {state}' "
-               f"transform='translate({icon.left:.1f},{icon_top})'>{kind_mark(icon.kind)}</g>")
+               f"transform='translate({icon.left:.1f},{icon_top})'>{kind_icon(icon.kind)}</g>")
 
 
 @dataclass(frozen=True)
@@ -485,10 +485,10 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
                      "</figure>" for hours in PERIODS_H)
     legend = "".join(f"<span class=key><span class='swatch {verdict.replace(' ', '-')}'></span>"
                      f"<span class='icon {verdict.replace(' ', '-')}'>"
-                     f"{svg_icon(VERDICT_MARKS[verdict], size=VERDICT_MARK_H)}</span> {word}</span>"
+                     f"{svg_icon(VERDICT_ICONS[verdict], size=VERDICT_ICON_H)}</span> {word}</span>"
                      for verdict, word in VERDICT_WORDS.items())
     kinds = "".join(f"<span class=key{_kind_tip(kind)}><span class='icon {kind.replace(' ', '-')} key-ink'>"
-                    f"{kind_mark(kind)}</span>{words}</span>" for kind, words in KIND_WORDS.items())
+                    f"{kind_icon(kind)}</span>{words}</span>" for kind, words in KIND_WORDS.items())
     return (f"<div class=frozen><div class=chart-head><div class=legend>{legend}<span class=key>"
             f"<span class='swatch waited-key'></span>{WAITING_IN_LINE}</span><span class=key data-tip='{SESSION_TIP}'>"
             f"<span class='swatch session-key'></span>Session</span></div>"

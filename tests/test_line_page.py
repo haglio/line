@@ -102,13 +102,13 @@ def _one_run_of(kind: str) -> str:
     return _chart(line_page.render([], [run], now=minute(60)), hours=4)
 
 
-@pytest.mark.parametrize(("kind", "mark"), [
+@pytest.mark.parametrize(("kind", "icon"), [
     (line_page.ALL, "grid"), (line_page.CHANGED, "cells_in_circle"), (line_page.NAMED, "pair_in_circle"),
     (line_page.NO_FLAKES, "snowflake_struck_out"), (line_page.AGAIN, "warning"),
     (line_page.MEASURING, "jigsaw"),
 ])
-def test_each_kind_of_run_wears_the_familys_mark_for_it(kind, mark):
-    assert svg_icon(mark, size=line_page.ICON_H) in _icon(_one_run_of(kind), kind.replace(" ", "-"))
+def test_each_kind_of_run_wears_the_familys_icon_for_it(kind, icon):
+    assert svg_icon(icon, size=line_page.ICON_H) in _icon(_one_run_of(kind), kind.replace(" ", "-"))
 
 
 def test_icons_of_runs_that_start_close_together_in_one_row_spread_apart_instead_of_overlapping():
@@ -709,7 +709,7 @@ def test_the_legend_starts_with_currently_running():
     going = re.search(r"<span class='swatch going'></span><span class='icon going'>(<svg .*?</svg>)</span> ([^<]*)</span>",
                       page)
     assert (swatches[0], *going.groups()) == (
-        "going", svg_icon("disc", size=line_page.VERDICT_MARK_H), "Currently running")
+        "going", svg_icon("disc", size=line_page.VERDICT_ICON_H), "Currently running")
 
 
 def test_a_run_not_yet_ended_says_currently_running_once_it_has_the_machine_and_waiting_in_line_before():
