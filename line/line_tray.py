@@ -43,7 +43,7 @@ from line import (
 from line.ship_time_tray import (
     CHECKOUT,
     OneAtATime,
-    PageAskingForWork,
+    answer_a_press_of_work_on_this,
     measuring_ship_time,
     open_the_work,
 )
@@ -140,8 +140,8 @@ def web_profile(storage: Path) -> QWebEngineProfile:
 
 def open_window(page: Path, profile: QWebEngineProfile, copy: LineCopy,
                 work_asked: Callable[[str, str], object]) -> QWebEngineView:
-    view = QWebEngineView()
-    view.setPage(PageAskingForWork(profile, view, work_asked))
+    view = QWebEngineView(profile)
+    view.page().navigationRequested.connect(lambda request: answer_a_press_of_work_on_this(request, work_asked))
     view.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
     view.setWindowTitle(copy.title)
     view.setWindowIcon(copy.icon())

@@ -8,8 +8,6 @@ from pathlib import Path
 
 from app_support import haglio_settings, siblings
 from app_support.subprocess_utils import hidden_subprocess_kwargs
-from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
-from PyQt6.QtWidgets import QWidget
 
 from line import ship_time, ship_time_work
 
@@ -31,17 +29,11 @@ class OneAtATime:
             self._has_ended = lambda: job.poll() is not None
 
 
-class PageAskingForWork(QWebEnginePage):
-    def __init__(self, profile: QWebEngineProfile, parent: QWidget, work_asked: Callable[[str, str], object]):
-        super().__init__(profile, parent)
-        self._work_asked = work_asked
-
-    def acceptNavigationRequest(self, url, _kind, _is_main_frame) -> bool:
-        asked = ship_time_work.asked_for(url.toString())
-        if asked is None:
-            return True
-        self._work_asked(*asked)
-        return False
+def answer_a_press_of_work_on_this(request, work_asked: Callable[[str, str], object]) -> None:
+    asked = ship_time_work.asked_for(request.url().toString())
+    if asked is not None:
+        request.reject()
+        work_asked(*asked)
 
 
 def folder_the_checkouts_sit_in() -> Path:
