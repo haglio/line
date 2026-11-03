@@ -444,9 +444,9 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
                         f"width={held_width(split, end):.1f} height={RAN_H} rx={RAN_RX}></rect></g>")
         icons_by_subrow.setdefault(top, []).append(RunIcon(split, run.kind, _state(run)))
     parts.extend(bars)
+    parts.append(f"<rect class=now x={x(now) - 0.75:.2f} y=0 width=1.5 height={layout.height}></rect>")
     for top, icons in icons_by_subrow.items():
         parts.extend(_run_icons(top, icons))
-    parts.append(f"<rect class=now x={x(now) - 0.75:.2f} y=0 width=1.5 height={layout.height}></rect>")
     dots = (f"<defs><pattern id=dots-{hours} width={DOT_EVERY} height={SESSION_H} patternUnits=userSpaceOnUse>"
             f"<circle class=dot cx={DOT_EVERY / 2} cy={SESSION_H / 2} r={SESSION_H / 2}></circle></pattern></defs>")
     return (f"<svg viewBox='0 0 {LABEL_W + CHART_W + RIGHT_MARGIN} {layout.height + 6}' role=img "
