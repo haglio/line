@@ -12,7 +12,6 @@ import pytest
 from app_support.testing import start_again_stand_in, update_waiting_for
 from PyQt6.QtCore import QEvent, QLibraryInfo, Qt, QUrl
 from PyQt6.QtGui import QIcon
-from PyQt6.QtTest import QSignalSpy
 from PyQt6.QtWidgets import QApplication
 from shared_ui.foreground import bring_to_front
 from shared_ui.palette import MAGENTA, PREVIEW_INK
@@ -27,6 +26,13 @@ def offscreen_app():
     app = QApplication.instance() or line_tray.application(["test_line_tray"], line_tray.this_copy(None))
     assert app.platformName() == "offscreen"
     return app
+
+
+def _page_named(view, title: str, seconds: float = 10) -> bool:
+    deadline = time.monotonic() + seconds
+    while view.title() != title and time.monotonic() < deadline:
+        QApplication.processEvents()
+    return view.title() == title
 
 
 def _nothing_asked(_number, _week):
@@ -261,14 +267,13 @@ def test_the_window_is_titled_line_wears_its_icon_and_is_dark_before_its_page_lo
     page.write_text("<!doctype html><title>Line</title>", encoding="utf-8")
     profile = line_tray.web_profile(tmp_path / "storage")
     view = line_tray.open_window(page, profile, line_tray.this_copy(None), _nothing_asked)
-    loaded = QSignalSpy(view.loadFinished)
     view.show()
     try:
         assert view.windowTitle() == "Line"
         assert _pixels(view.windowIcon()) == _pixels(QIcon(str(line_tray.ICON)))
         assert view.page().backgroundColor().name() == line_page.DARK_BACKGROUND
         assert view.page().profile() is profile
-        assert loaded.wait(10000)
+        assert _page_named(view, "Line")
         assert view.url() == QUrl.fromLocalFile(str(page))
     finally:
         _closed(view)
@@ -282,10 +287,9 @@ def test_pressing_work_on_this_asks_for_that_number_and_week_and_leaves_the_page
     profile = line_tray.web_profile(tmp_path / "storage")
     view = line_tray.open_window(page, profile, line_tray.this_copy(None),
                                  lambda number, week: asked.append((number, week)))
-    loaded = QSignalSpy(view.loadFinished)
     view.show()
     try:
-        assert loaded.wait(10000)
+        assert _page_named(view, "Line")
         view.page().runJavaScript("document.getElementById('b').click()")
         deadline = time.monotonic() + 10
         while not asked and time.monotonic() < deadline:
@@ -389,10 +393,9 @@ def test_a_preview_window_keeps_its_title_after_its_page_names_itself(offscreen_
     copy = line_tray.this_copy(Preview("the yellow L"))
     profile = line_tray.web_profile(tmp_path / "storage")
     view = line_tray.open_window(page, profile, copy, _nothing_asked)
-    loaded = QSignalSpy(view.loadFinished)
     view.show()
     try:
-        assert loaded.wait(10000)
+        assert _page_named(view, "Line")
         QApplication.processEvents()
         assert view.windowTitle() == copy.title
         assert _center(view.windowIcon()) == PREVIEW_INK
