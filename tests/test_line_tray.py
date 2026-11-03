@@ -1,4 +1,5 @@
 import ctypes
+import gc
 import logging
 import os
 import subprocess
@@ -63,6 +64,14 @@ def _closed(view) -> None:
 
 def _let_closed_windows_go() -> None:
     QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+
+
+@pytest.fixture(autouse=True)
+def _each_test_s_web_profiles_go_with_it():
+    yield
+    _let_closed_windows_go()
+    gc.collect()
+    _let_closed_windows_go()
 
 
 class _Signal:
