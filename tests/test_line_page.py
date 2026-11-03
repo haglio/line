@@ -11,7 +11,8 @@ from app_support.integration_runs import RunRecord, read_runs, write_run
 from app_support.win32 import process_started
 from shared_ui.icons_svg import svg_icon
 
-from line import line_page
+from line import line_page, session_lifetimes
+from line.ship_time_row import AroundTheChart
 
 T0 = datetime(2026, 10, 10, 20, 0, tzinfo=UTC)
 
@@ -216,7 +217,7 @@ def _session_lines(chart: str) -> list[tuple[float, float]]:
 def test_a_rows_session_is_a_dotted_line_from_when_it_was_spawned_to_when_it_was_archived():
     run = line_page.Run("crown colors", "the whole suite", minute(10), minute(20), exit_code=0,
                         got_the_machine=minute(12), session="5e55-10n")
-    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(30))}
+    spans = {"5e55-10n": session_lifetimes.Lifetime(spawned=minute(0), archived=minute(30))}
 
     page = line_page.render([], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans))
 
@@ -237,7 +238,7 @@ def _css_units(selector: str, attribute: str) -> float:
 def test_the_legend_names_the_dotted_line_session_shows_three_dots_or_more_and_says_spawned_to_archived_on_hover():
     run = line_page.Run("crown colors", "the whole suite", minute(10), minute(20), exit_code=0,
                         got_the_machine=minute(12), session="5e55-10n")
-    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(30))}
+    spans = {"5e55-10n": session_lifetimes.Lifetime(spawned=minute(0), archived=minute(30))}
 
     page = line_page.render([], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans))
 
@@ -262,7 +263,7 @@ def test_the_legends_bars_dots_and_icons_are_drawn_the_size_the_chart_draws_them
 def test_a_sessions_dots_pass_under_its_runs_bars_waiting_or_running_without_showing_through():
     run = line_page.Run("crown colors", "the whole suite", minute(10), minute(20), exit_code=0,
                         got_the_machine=minute(12), session="5e55-10n")
-    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(30))}
+    spans = {"5e55-10n": session_lifetimes.Lifetime(spawned=minute(0), archived=minute(30))}
 
     chart = _chart(line_page.render([], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans)), hours=1)
 
@@ -285,7 +286,7 @@ def test_a_second_run_waiting_while_the_first_runs_never_draws_its_gray_over_the
 
 def test_an_open_sessions_dotted_line_runs_on_to_now():
     run = line_page.Run("crown colors", "the whole suite", minute(10), session="5e55-10n")
-    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=None)}
+    spans = {"5e55-10n": session_lifetimes.Lifetime(spawned=minute(0), archived=None)}
 
     whole_hour = _chart(line_page.render([run], [run], now=minute(60), sessions=line_page.Sessions(lifetimes=spans)), hours=1)
 
@@ -310,12 +311,12 @@ def test_the_claude_apps_records_say_when_each_session_was_spawned_and_whether_i
                  lastActivityAt=_ms(minute(50)), isArchived=False)
     (account / "local_torn.json").write_text("{", encoding="utf-8")
 
-    sessions = sorted(line_page.app_sessions([(tmp_path, line_page.CLAUDE_APP_SESSIONS[0][1])]),
+    sessions = sorted(session_lifetimes.app_sessions([(tmp_path, session_lifetimes.CLAUDE_APP_SESSIONS[0][1])]),
                       key=lambda session: session.app_id)
 
     assert sessions == [
-        line_page.AppSession("local_one", ("5e55-10n", "5e55-0ld"), minute(0), True, minute(40)),
-        line_page.AppSession("local_two", ("0pen-5e5",), minute(5), False, minute(50)),
+        session_lifetimes.AppSession("local_one", ("5e55-10n", "5e55-0ld"), minute(0), True, minute(40)),
+        session_lifetimes.AppSession("local_two", ("0pen-5e5",), minute(5), False, minute(50)),
     ]
 
 
@@ -326,7 +327,7 @@ def test_a_session_kept_in_two_places_is_read_from_the_first_place_the_app_keeps
     _app_session(plain, "local_one", cliSessionId="5e55-10n", createdAt=_ms(minute(0)),
                  lastActivityAt=_ms(minute(10)), isArchived=False)
 
-    [session] = line_page.app_sessions([(tmp_path / "packaged", "*/*/local_*.json"),
+    [session] = session_lifetimes.app_sessions([(tmp_path / "packaged", "*/*/local_*.json"),
                                         (tmp_path / "plain", "*/*/local_*.json")])
 
     assert (session.archived, session.last_active) == (True, minute(40))
@@ -334,25 +335,25 @@ def test_a_session_kept_in_two_places_is_read_from_the_first_place_the_app_keeps
 
 def test_line_writes_down_the_moment_it_first_sees_an_open_session_archived_and_keeps_that_moment(tmp_path):
     seen = tmp_path / "sessions_seen.json"
-    still_open = line_page.AppSession("local_one", ("5e55-10n",), minute(0), False, minute(20))
+    still_open = session_lifetimes.AppSession("local_one", ("5e55-10n",), minute(0), False, minute(20))
     archived = replace(still_open, archived=True, last_active=minute(25))
 
-    assert line_page.archive_moments(seen, [still_open], now=minute(30)) == {}
-    assert line_page.archive_moments(seen, [archived], now=minute(40)) == {"local_one": minute(40)}
-    assert line_page.archive_moments(seen, [archived], now=minute(50)) == {"local_one": minute(40)}
+    assert session_lifetimes.archive_moments(seen, [still_open], now=minute(30)) == {}
+    assert session_lifetimes.archive_moments(seen, [archived], now=minute(40)) == {"local_one": minute(40)}
+    assert session_lifetimes.archive_moments(seen, [archived], now=minute(50)) == {"local_one": minute(40)}
 
 
 def test_a_session_ends_where_line_saw_it_archived_or_at_its_last_activity_when_line_never_saw_it_open():
-    seen_archived = line_page.AppSession("local_one", ("5e55-10n", "5e55-0ld"), minute(0), True, minute(25))
-    archived_unseen = line_page.AppSession("local_two", ("0ld-5e55",), minute(5), True, minute(15))
-    still_open = line_page.AppSession("local_three", ("0pen-5e5",), minute(10), False, minute(55))
+    seen_archived = session_lifetimes.AppSession("local_one", ("5e55-10n", "5e55-0ld"), minute(0), True, minute(25))
+    archived_unseen = session_lifetimes.AppSession("local_two", ("0ld-5e55",), minute(5), True, minute(15))
+    still_open = session_lifetimes.AppSession("local_three", ("0pen-5e5",), minute(10), False, minute(55))
 
-    spans = line_page.lifetimes([seen_archived, archived_unseen, still_open], {"local_one": minute(40)})
+    spans = session_lifetimes.lifetimes([seen_archived, archived_unseen, still_open], {"local_one": minute(40)})
 
-    assert spans == {"5e55-10n": line_page.Lifetime(minute(0), minute(40)),
-                     "5e55-0ld": line_page.Lifetime(minute(0), minute(40)),
-                     "0ld-5e55": line_page.Lifetime(minute(5), minute(15)),
-                     "0pen-5e5": line_page.Lifetime(minute(10), None)}
+    assert spans == {"5e55-10n": session_lifetimes.Lifetime(minute(0), minute(40)),
+                     "5e55-0ld": session_lifetimes.Lifetime(minute(0), minute(40)),
+                     "0ld-5e55": session_lifetimes.Lifetime(minute(5), minute(15)),
+                     "0pen-5e5": session_lifetimes.Lifetime(minute(10), None)}
 
 
 def test_a_run_is_named_for_the_branch_that_asked_for_it():
@@ -444,7 +445,7 @@ def test_a_sessions_name_and_place_in_line_sit_at_the_middle_of_its_subrows():
 def test_a_sessions_dotted_line_runs_along_each_of_its_subrows():
     *crown, other = _two_runs_of_one_session_at_once_and_another_sessions_run()
     crown = [replace(run, session="5e55-10n") for run in crown]
-    spans = {"5e55-10n": line_page.Lifetime(spawned=minute(0), archived=minute(55))}
+    spans = {"5e55-10n": session_lifetimes.Lifetime(spawned=minute(0), archived=minute(55))}
 
     chart = _chart(line_page.render([], [*crown, other], now=minute(60), sessions=line_page.Sessions(lifetimes=spans)),
                    hours=1)
@@ -689,7 +690,7 @@ def test_the_legend_buttons_and_times_stay_at_the_top_of_the_window_while_the_ro
 
 
 def test_the_page_reloads_itself_by_its_own_clock_rather_than_by_a_refresh_tag():
-    page = line_page.render([], [], now=T0, refresh_s=30)
+    page = line_page.render([], [], now=T0, around=AroundTheChart(refresh_s=30))
 
     assert "<body data-refresh=30>" in page
     assert "http-equiv=refresh" not in page
@@ -733,11 +734,10 @@ def test_a_run_that_waited_and_then_ran_draws_its_gray_wait_and_then_its_running
 
 def test_each_refresh_draws_the_page_with_the_tool_as_it_is_on_disk_then(tmp_path):
     page = tmp_path / "line.html"
-    tool = str(Path(line_page.__file__).resolve())
+    module = [sys.executable, "-m", "line.line_page"]
 
-    assert line_page.refresh_command(page, 1, 30) == [
-        sys.executable, tool, "--out", str(page), "--days", "1", "--refresh", "30"]
-    assert line_page.refresh_command(page, 1, None) == [sys.executable, tool, "--out", str(page), "--days", "1"]
+    assert line_page.refresh_command(page, 1, 30) == [*module, "--out", str(page), "--days", "1", "--refresh", "30"]
+    assert line_page.refresh_command(page, 1, None) == [*module, "--out", str(page), "--days", "1"]
 
 
 def test_a_short_runs_bar_never_reaches_into_the_next_runs_bar():

@@ -29,6 +29,10 @@ def offscreen_app():
     return app
 
 
+def _nothing_asked(_number, _week):
+    raise AssertionError("no button was pressed")
+
+
 def _pixels(icon: QIcon):
     return icon.pixmap(32, 32).toImage()
 
@@ -256,7 +260,7 @@ def test_the_window_is_titled_line_wears_its_icon_and_is_dark_before_its_page_lo
     page = tmp_path / "line.html"
     page.write_text("<!doctype html><title>Line</title>", encoding="utf-8")
     profile = line_tray.web_profile(tmp_path / "storage")
-    view = line_tray.open_window(page, profile, line_tray.this_copy(None))
+    view = line_tray.open_window(page, profile, line_tray.this_copy(None), _nothing_asked)
     loaded = QSignalSpy(view.loadFinished)
     view.show()
     try:
@@ -265,6 +269,28 @@ def test_the_window_is_titled_line_wears_its_icon_and_is_dark_before_its_page_lo
         assert view.page().backgroundColor().name() == line_page.DARK_BACKGROUND
         assert view.page().profile() is profile
         assert loaded.wait(10000)
+        assert view.url() == QUrl.fromLocalFile(str(page))
+    finally:
+        _closed(view)
+
+
+def test_pressing_work_on_this_asks_for_that_number_and_week_and_leaves_the_page_where_it_is(offscreen_app, tmp_path):
+    page = tmp_path / "line.html"
+    page.write_text("<!doctype html><title>Line</title><a id=b href='https://line-work.invalid/crashes/2026-W44'>Work on this</a>",
+                    encoding="utf-8")
+    asked = []
+    profile = line_tray.web_profile(tmp_path / "storage")
+    view = line_tray.open_window(page, profile, line_tray.this_copy(None),
+                                 lambda number, week: asked.append((number, week)))
+    loaded = QSignalSpy(view.loadFinished)
+    view.show()
+    try:
+        assert loaded.wait(10000)
+        view.page().runJavaScript("document.getElementById('b').click()")
+        deadline = time.monotonic() + 10
+        while not asked and time.monotonic() < deadline:
+            QApplication.processEvents()
+        assert asked == [("crashes", "2026-W44")]
         assert view.url() == QUrl.fromLocalFile(str(page))
     finally:
         _closed(view)
@@ -285,7 +311,7 @@ def test_a_window_he_closes_is_gone_so_the_next_show_opens_a_fresh_one(offscreen
     opened = []
 
     def open_window(shown: Path):
-        opened.append(line_tray.open_window(shown, profile, line_tray.this_copy(None)))
+        opened.append(line_tray.open_window(shown, profile, line_tray.this_copy(None), _nothing_asked))
         return opened[-1]
 
     window = line_tray.LineWindow(page, open_window=open_window, write_now=lambda: None,
@@ -362,7 +388,7 @@ def test_a_preview_window_keeps_its_title_after_its_page_names_itself(offscreen_
     page.write_text("<!doctype html><title>Line</title>", encoding="utf-8")
     copy = line_tray.this_copy(Preview("the yellow L"))
     profile = line_tray.web_profile(tmp_path / "storage")
-    view = line_tray.open_window(page, profile, copy)
+    view = line_tray.open_window(page, profile, copy, _nothing_asked)
     loaded = QSignalSpy(view.loadFinished)
     view.show()
     try:
@@ -577,7 +603,7 @@ def test_the_page_is_written_now_by_a_hidden_console_child(tmp_path, monkeypatch
     assert options["startupinfo"].wShowWindow == 0
 
 
-def test_the_page_is_written_in_the_background_by_one_hidden_child_at_a_time(tmp_path, monkeypatch):
+def test_the_page_is_written_in_the_background_by_one_hidden_child_at_a_time(tmp_path):
     started = []
 
     class _StillWriting:
@@ -587,8 +613,7 @@ def test_the_page_is_written_in_the_background_by_one_hidden_child_at_a_time(tmp
         def poll(self):
             return None
 
-    monkeypatch.setattr(line_tray.subprocess, "Popen", _StillWriting)
-    writer = line_tray._PageWriter(tmp_path / "line.html")
+    writer = line_tray._PageWriter(tmp_path / "line.html", start=_StillWriting)
 
     writer.in_background()
     writer.in_background()

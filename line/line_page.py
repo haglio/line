@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 import argparse
-import html
 import json
 import os
 import re
 import sys
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from app_support import haglio_settings, integration_runs, siblings
-from app_support.file_channel import write_whole
 from app_support.integration_runs import (
     AGAIN,
     ALL,
@@ -50,6 +48,15 @@ from shared_ui.spacing import (
     MARGIN_DIALOG,
 )
 from shared_ui.type_scale import FONT_UI, SIZE_BODY, SIZE_SMALL, in_pixels
+
+from line.page_words import escaped, tip
+from line.session_lifetimes import SEEN_SESSIONS, Lifetime, app_sessions, archive_moments, lifetimes
+from line.ship_time_row import (
+    NOTHING_AROUND_THE_CHART,
+    SHIP_TIME_STYLE,
+    AroundTheChart,
+    read_around_the_chart,
+)
 
 _SESSION_SUFFIX = re.compile(r"-[0-9a-f]{6}$")
 
@@ -168,14 +175,6 @@ def _span(seconds: float | None) -> str:
         return "unknown"
     hours, minutes = divmod(round(seconds / 60), 60)
     return f"{hours} h {minutes:02d} min" if hours else f"{minutes} min"
-
-
-def _e(text: object) -> str:
-    return html.escape(str(text), quote=True)
-
-
-def _tip(head: str, lines: list[str]) -> str:
-    return _e("|".join([head, *lines]))
 
 
 BARS_H = 30
@@ -304,12 +303,6 @@ def _run_icons(top: float, icons: list[RunIcon]) -> Iterator[str]:
 
 
 @dataclass(frozen=True)
-class Lifetime:
-    spawned: datetime
-    archived: datetime | None
-
-
-@dataclass(frozen=True)
 class Sessions:
     names: dict[str, str] = field(default_factory=dict)
     lifetimes: dict[str, Lifetime] = field(default_factory=dict)
@@ -397,8 +390,8 @@ def _row_name(row: str, middle: float, place: int | None) -> Iterator[str]:
         yield f"<text class=place x={PLACE_X} y={middle + 4.5}>{place}</text>"
     fitted = row if len(row) <= LABEL_CHARS else row[:LABEL_CHARS - 1].rstrip() + "…"
     note = ROW_NOTES.get(row) or (row if fitted != row else "")
-    title = f"<title>{_e(note)}</title>" if note else ""
-    yield f"<text class=row-name x={LABEL_W - 10} y={middle + 4.5}>{_e(fitted)}{title}</text>"
+    title = f"<title>{escaped(note)}</title>" if note else ""
+    yield f"<text class=row-name x={LABEL_W - 10} y={middle + 4.5}>{escaped(fitted)}{title}</text>"
 
 
 def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
@@ -436,11 +429,11 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
         hit_left = left - max(0.0, SMALLEST_HIT - (right - left)) / 2
         split = min(right, x(run.got_the_machine)) if run.got_the_machine else right
         ran = run.ran_s(now)
-        tip = _tip(_state_words(run), [
+        run_tip = tip(_state_words(run), [
             row_of[id(run)], run.what,
             f"Joined {_clock(run.joined, now)}, ended {_clock(end, now) if run.ended else 'now'}",
             f"Waited {_span(run.waited_s(now))}, ran " + (_span(ran) if ran is not None else "not yet")])
-        group = f"<g class='run {run.verdict.replace(' ', '-')}' data-tip='{tip}'>"
+        group = f"<g class='run {run.verdict.replace(' ', '-')}' data-tip='{run_tip}'>"
         parts.append(f"{group}<rect class=hit x={hit_left:.1f} y={top} width={max(right - left, SMALLEST_HIT):.1f} "
                      f"height={BARS_H}></rect>"
                      + (f"<rect class=waited x={left:.1f} y={middle - WAITED_H / 2} width={split - left:.1f} "
@@ -460,12 +453,12 @@ def _chart(runs: list[Run], now: datetime, hours: int, rows: Rows) -> str:
             f"aria-label='Integration runs in the last {_hours_words(hours)}'>{dots}{''.join(parts)}</svg>")
 
 
-SESSION_TIP = _tip("Session", [("The dotted line runs from when the session was spawned until it was archived, or up "
+SESSION_TIP = tip("Session", [("The dotted line runs from when the session was spawned until it was archived, or up "
                                 "to now while it is still open.")])
 
 
 def _kind_tip(kind: str) -> str:
-    return f" data-tip='{_tip(KIND_TIPS[kind][0], KIND_TIPS[kind][1:])}'" if kind in KIND_TIPS else ""
+    return f" data-tip='{tip(KIND_TIPS[kind][0], KIND_TIPS[kind][1:])}'" if kind in KIND_TIPS else ""
 
 
 def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now: datetime, sessions: Sessions) -> str:
@@ -596,13 +589,14 @@ if (reloadEvery) setInterval(() => { if (tip.style.display !== 'block') location
 """
 
 
-def render(line: list[Run], runs: list[Run], now: datetime, refresh_s: int | None = None,
-           sessions: Sessions | None = None) -> str:
-    refresh = f" data-refresh={refresh_s}" if refresh_s else ""
+def render(line: list[Run], runs: list[Run], now: datetime, sessions: Sessions | None = None,
+           around: AroundTheChart = NOTHING_AROUND_THE_CHART) -> str:
+    refresh = f" data-refresh={around.refresh_s}" if around.refresh_s else ""
     return (f"<!doctype html><html lang=en><head><meta charset=utf-8>"
             f"<meta name=viewport content='width=device-width, initial-scale=1'>"
-            f"<title>{APP_NAME}</title><style>{STYLE}</style></head><body{refresh}><main>"
-            f"{_charts_with_their_legend_and_periods(runs, line, now, sessions or Sessions())}</main>"
+            f"<title>{APP_NAME}</title><style>{STYLE}{SHIP_TIME_STYLE}</style></head><body{refresh}><main>"
+            f"{around.above_the_chart(now)}<div class=runs>{_charts_with_their_legend_and_periods(runs, line, now, sessions or Sessions())}</div>"
+            f"{around.below_the_chart()}</main>"
             f"<div id=tip></div><script>{SCRIPT}</script></body></html>")
 
 
@@ -644,69 +638,6 @@ def session_names(projects: Path, worktrees: Path, checkouts: Iterable[str], ses
     return names
 
 
-CLAUDE_APP_SESSIONS = (
-    (Path.home() / "AppData" / "Local" / "Packages",
-     "Claude_*/LocalCache/Roaming/Claude/claude-code-sessions/*/*/local_*.json"),
-    (Path.home() / "AppData" / "Roaming" / "Claude" / "claude-code-sessions", "*/*/local_*.json"),
-)
-
-
-@dataclass(frozen=True)
-class AppSession:
-    app_id: str
-    claude_code_ids: tuple[str, ...]
-    spawned: datetime
-    archived: bool
-    last_active: datetime
-
-
-def _from_ms(ms: int) -> datetime:
-    return datetime.fromtimestamp(ms / 1000, UTC)
-
-
-def app_sessions(places: Iterable[tuple[Path, str]] = CLAUDE_APP_SESSIONS) -> list[AppSession]:
-    sessions: dict[str, AppSession] = {}
-    for root, pattern in places:
-        for path in root.glob(pattern):
-            try:
-                record = json.loads(path.read_text(encoding="utf-8"))
-                ids = tuple(filter(None, [record.get("cliSessionId"), *record.get("priorCliSessionIds", [])]))
-                session = AppSession(record["sessionId"], ids, _from_ms(record["createdAt"]),
-                                     bool(record.get("isArchived")), _from_ms(record["lastActivityAt"]))
-            except (OSError, ValueError, KeyError, TypeError):
-                continue
-            sessions.setdefault(session.app_id, session)
-    return list(sessions.values())
-
-
-SEEN_KEPT_FOR = timedelta(days=15)
-SEEN_SESSIONS = "sessions_seen.json"
-
-
-def archive_moments(seen: Path, sessions: list[AppSession], now: datetime) -> dict[str, datetime]:
-    try:
-        remembered = json.loads(seen.read_text(encoding="utf-8"))
-        was_open = set(remembered["open"])
-        moments = {app_id: datetime.fromisoformat(when) for app_id, when in remembered["archived"].items()}
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
-        was_open, moments = set(), {}
-    for session in sessions:
-        if session.archived and session.app_id in was_open:
-            moments.setdefault(session.app_id, now)
-    moments = {app_id: when for app_id, when in moments.items() if when >= now - SEEN_KEPT_FOR}
-    write_whole(seen, json.dumps({"open": sorted(session.app_id for session in sessions if not session.archived),
-                                  "archived": {app_id: when.isoformat() for app_id, when in sorted(moments.items())}}))
-    return moments
-
-
-def lifetimes(sessions: list[AppSession], archived_at: dict[str, datetime]) -> dict[str, Lifetime]:
-    spans = {}
-    for session in sessions:
-        ended = archived_at.get(session.app_id, session.last_active) if session.archived else None
-        spans.update(dict.fromkeys(session.claude_code_ids, Lifetime(session.spawned, ended)))
-    return spans
-
-
 WATCH_EVERY_S = 30
 
 
@@ -726,12 +657,14 @@ def write_the_page(page: Path, days: int, refresh_s: int | None) -> None:
     sessions = app_sessions()
     spans = lifetimes(sessions, archive_moments(page.parent / SEEN_SESSIONS, sessions, now))
     unfinished = page.with_suffix(".partial")
-    unfinished.write_text(render(the_line(runs), runs, now, refresh_s, Sessions(names, spans)), encoding="utf-8")
+    unfinished.write_text(render(the_line(runs), runs, now, Sessions(names, spans),
+                                  read_around_the_chart(page.parent, refresh_s)),
+                           encoding="utf-8")
     os.replace(unfinished, page)
 
 
 def refresh_command(page: Path, days: int, refresh_s: int | None) -> list[str]:
-    command = [sys.executable, str(Path(__file__).resolve()), "--out", str(page), "--days", str(days)]
+    command = [sys.executable, "-m", "line.line_page", "--out", str(page), "--days", str(days)]
     return [*command, "--refresh", str(refresh_s)] if refresh_s else command
 
 

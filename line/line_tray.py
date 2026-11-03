@@ -30,12 +30,30 @@ from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
 from shared_ui.preview_icon import app_icon
 
-from line import line_page
+from line import (
+    line_page,
+    page_words,
+    session_lifetimes,
+    ship_time,
+    ship_time_charts,
+    ship_time_row,
+    ship_time_tray,
+    ship_time_work,
+)
+from line.ship_time_tray import (
+    CHECKOUT,
+    OneAtATime,
+    PageAskingForWork,
+    looking_after_sessions,
+    measuring_ship_time,
+    start_the_work,
+)
 
 PROGRAM = Path(__file__).resolve()
-CHECKOUT = PROGRAM.parent.parent
 ICON = CHECKOUT / "icon.ico"
-LINE_FILES = (PROGRAM, Path(line_page.__file__).resolve(), ICON)
+LINE_FILES = (PROGRAM, *(Path(module.__file__).resolve() for module in (
+    line_page, page_words, session_lifetimes, ship_time, ship_time_charts, ship_time_row, ship_time_tray,
+    ship_time_work)), ICON)
 WINDOW_SIZE = (1240, 860)
 ASFW_ANY = -1
 WEB_VIEW_ARGUMENTS = ["--webEngineArgs", "--disable-gpu"]
@@ -121,8 +139,10 @@ def web_profile(storage: Path) -> QWebEngineProfile:
     return profile
 
 
-def open_window(page: Path, profile: QWebEngineProfile, copy: LineCopy) -> QWebEngineView:
-    view = QWebEngineView(profile)
+def open_window(page: Path, profile: QWebEngineProfile, copy: LineCopy,
+                work_asked: Callable[[str, str], object]) -> QWebEngineView:
+    view = QWebEngineView()
+    view.setPage(PageAskingForWork(profile, view, work_asked))
     view.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
     view.setWindowTitle(copy.title)
     view.setWindowIcon(copy.icon())
@@ -248,22 +268,17 @@ class Quitting:
 
 
 class _PageWriter:
-    def __init__(self, page: Path):
+    def __init__(self, page: Path, start: Callable[..., subprocess.Popen] = subprocess.Popen):
         self.page = page
-        self._running: subprocess.Popen | None = None
+        self.in_background = OneAtATime(self._command(), start=start).in_background
 
     def _command(self) -> list[str]:
         return line_page.refresh_command(self.page, 1, line_page.WATCH_EVERY_S)
 
     def now(self) -> None:
         with contextlib.suppress(subprocess.TimeoutExpired, OSError):
-            subprocess.run(self._command(), timeout=line_page.WATCH_EVERY_S * 4, check=False,
+            subprocess.run(self._command(), cwd=CHECKOUT, timeout=line_page.WATCH_EVERY_S * 4, check=False,
                            **hidden_subprocess_kwargs())
-
-    def in_background(self) -> None:
-        if self._running is not None and self._running.poll() is None:
-            return
-        self._running = subprocess.Popen(self._command(), **hidden_subprocess_kwargs())
 
 
 _ASKING_PATIENCE_S = 2.5
@@ -328,11 +343,20 @@ def _build_the_window(copy: LineCopy, loading: Loading) -> LineWindow:
     writer = _PageWriter(copy.page)
     profile = web_profile(copy.storage)
     shown_as = replace(copy, title=title_until(copy, datetime.now(UTC).astimezone()))
-    window = LineWindow(copy.page, open_window=lambda page: open_window(page, profile, shown_as),
+    window = LineWindow(copy.page, open_window=lambda page: open_window(
+                            page, profile, shown_as,
+                            lambda number, week: start_the_work(copy.state, number, week)),
                         write_now=writer.now, write_in_background=writer.in_background,
                         bring_to_front=bring_to_front)
     loading.say(opening_the_window)
     return window
+
+
+def every(milliseconds: int, action: Callable[[], object]) -> QTimer:
+    timer = QTimer()
+    timer.timeout.connect(action)
+    timer.start(milliseconds)
+    return timer
 
 
 def run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
@@ -380,18 +404,20 @@ def run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
         if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
     tray.show()
     quitting.hand_back_after_the_hour(QTimer.singleShot)
-    timer = QTimer()
-    timer.timeout.connect(window.refresh)
-    timer.start(line_page.WATCH_EVERY_S * 1000)
-    looking_for_an_update = QTimer()
-    if (updates := watch_for_updates(copy, window, quit_this_copy=app.quit)) is not None:
-        looking_for_an_update.timeout.connect(updates.tick)
-        looking_for_an_update.start(UPDATE_CHECK_MS)
+    measuring = measuring_ship_time(copy.state)
+    measuring.in_background()
+    updates = watch_for_updates(copy, window, quit_this_copy=app.quit)
+    watching = looking_after_sessions(copy.state, tray)
+    kept_going = [every(line_page.WATCH_EVERY_S * 1000, window.refresh), every(ship_time_tray.LOOKED_FOR_FINISHED_SESSIONS_EVERY_MS, watching.tick),
+                  every(ship_time_tray.MEASURED_EVERY_MS, measuring.in_background),
+                  *([every(UPDATE_CHECK_MS, updates.tick)] if updates is not None else [])]
     loading.done()
     _log.info("started from %s", CHECKOUT)
     if open_now:
         show_the_window()
-    return run_until_it_ends(app.exec)
+    code = run_until_it_ends(app.exec)
+    kept_going.clear()
+    return code
 
 
 def run_until_it_ends(event_loop: Callable[[], int]) -> int:

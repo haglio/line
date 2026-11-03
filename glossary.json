@@ -156,6 +156,100 @@
         "preview"
       ],
       "status": "agreed"
+    },
+    {
+      "screen": [
+        "Ship Time"
+      ],
+      "his_word": "Ship Time",
+      "code_word": "ship time",
+      "id": "ship_time",
+      "thing": "the row across the top of the window with last week's four numbers",
+      "code_today": [
+        "ship_time"
+      ],
+      "status": "agreed"
+    },
+    {
+      "screen": [
+        "Median ship time",
+        "Slowest tenth",
+        "Bugs you reported",
+        "App crashes"
+      ],
+      "his_word": null,
+      "code_word": "number",
+      "id": "ship_time_number",
+      "thing": "one of the four boxes in the Ship Time row, its name above its value and how it compares with the week before",
+      "code_today": [
+        "number"
+      ],
+      "status": "kept"
+    },
+    {
+      "screen": [
+        "Taken back by the main verifier and not shipped again"
+      ],
+      "his_word": null,
+      "code_word": "taken back",
+      "id": "taken_back",
+      "thing": "the list under the Ship Time row of changes the main verifier took out of Fun Time that have not come back",
+      "code_today": [
+        "taken_back"
+      ],
+      "status": "kept"
+    },
+    {
+      "screen": [
+        "Ship time, minutes"
+      ],
+      "his_word": null,
+      "code_word": "ship time chart",
+      "id": "ship_time_chart",
+      "thing": "the chart below the chart of runs with a line each for Median and Slowest tenth, week by week",
+      "code_today": [
+        "ship_time_chart"
+      ],
+      "status": "kept"
+    },
+    {
+      "screen": [
+        "What got through"
+      ],
+      "his_word": null,
+      "code_word": "got through chart",
+      "id": "got_through_chart",
+      "thing": "the chart under it with bars for Bugs you reported and App crashes, week by week",
+      "code_today": [
+        "got_through_chart"
+      ],
+      "status": "kept"
+    },
+    {
+      "screen": [
+        "Every week"
+      ],
+      "his_word": null,
+      "code_word": "every week table",
+      "id": "every_week_table",
+      "thing": "the table at the bottom of the window with one row for each week",
+      "code_today": [
+        "every_week_table"
+      ],
+      "status": "kept"
+    },
+    {
+      "screen": [
+        "Work on this"
+      ],
+      "his_word": "button",
+      "code_word": "work on this",
+      "id": "work_on_this",
+      "thing": "the button in a Ship Time number that got worse; it starts an agent session",
+      "code_today": [
+        "work_on_this"
+      ],
+      "status": "kept"
     }
   ]
 }
