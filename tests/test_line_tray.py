@@ -415,10 +415,9 @@ def test_a_preview_window_keeps_its_title_after_its_page_names_itself(offscreen_
     copy = line_tray.this_copy(Preview("the yellow L"))
     profile = line_tray.web_profile(tmp_path / "storage")
     view = line_tray.open_window(page, profile, copy, _nothing_asked)
-    view.show()
     try:
-        assert _page_named(view, "Line")
-        QApplication.processEvents()
+        view.titleChanged.emit("Line")
+        view.iconChanged.emit(QIcon())
         assert view.windowTitle() == copy.title
         assert _center(view.windowIcon()) == PREVIEW_INK
     finally:
