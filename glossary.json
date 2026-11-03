@@ -245,7 +245,7 @@
       "his_word": "button",
       "code_word": "work on this",
       "id": "work_on_this",
-      "thing": "the button in a Ship Time number that got worse; it starts an agent session",
+      "thing": "the button in a Ship Time number that got worse; it opens a new session in Claude Desktop with what to look into typed in",
       "code_today": [
         "work_on_this"
       ],

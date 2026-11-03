@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from line.page_words import NO_VALUE
 from line.ship_time import ShipTimeRecord
 from line.ship_time_row import (
-    ALREADY_ASKED_TIP,
     MEASURING_WORDS,
     TAKEN_BACK_HEADING,
     WORK_ON_THIS,
@@ -86,14 +85,6 @@ def test_only_a_number_that_got_worse_has_a_button_and_it_names_the_number_and_t
     assert "href='https://line-work.invalid/median_minutes/2026-W44'" in shown
 
 
-def test_a_number_a_session_was_started_on_this_week_grays_its_button():
-    shown = ship_time_row(ShipTimeRecord([WEEK_BEFORE, LAST_WEEK], []), NOW, started={"2026-W44 median_minutes"})
-
-    assert shown.count(WORK_ON_THIS) == 1
-    assert "https://line-work.invalid/" not in shown
-    assert ALREADY_ASKED_TIP in shown
-
-
 def test_pointing_at_a_number_says_how_it_is_counted():
     assert "Bugs you reported|Sessions you opened yourself" in row(WEEK_BEFORE, LAST_WEEK).replace("&#x27;", "'")
 
@@ -113,4 +104,3 @@ def test_what_surrounds_the_chart_is_read_from_line_s_state(tmp_path):
 
     assert around.refresh_s == 30
     assert around.ship_time.weeks == [LAST_WEEK]
-    assert around.sessions_started == {}

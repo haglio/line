@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +17,7 @@ from shared_ui.type_scale import SIZE_BODY, SIZE_HEADING, SIZE_SMALL, in_pixels
 from line.page_words import NO_VALUE, day_words, escaped, minutes_words, monday_of, tip
 from line.ship_time import RECORD_NAME, ShipTimeRecord, read_the_record
 from line.ship_time_charts import WEEKS_STYLE, weeks_section
-from line.ship_time_work import ASKED_AT, SESSIONS_NAME, read_sessions, work_key
+from line.ship_time_work import ASKED_AT
 
 MEDIAN = "median_minutes"
 SLOWEST_TENTH = "slowest_tenth_minutes"
@@ -29,8 +28,7 @@ NUMBER_NAMES = {MEDIAN: "Median ship time", SLOWEST_TENTH: "Slowest tenth", BUGS
 MEASURING_WORDS = "Ship Time: measuring the weeks, which takes a minute or two the first time."
 TAKEN_BACK_HEADING = "Taken back by the main verifier and not shipped again"
 WORK_ON_THIS = "Work on this"
-WORK_ON_THIS_TIP = "Starts an agent session, in Auto, to find why this number got worse and fix what it can"
-ALREADY_ASKED_TIP = "A session has already been started on this number for this week"
+WORK_ON_THIS_TIP = "Opens a new session in Claude Desktop with what to look into typed in, ready to send"
 COUNTED_HOW = {
     MEDIAN: "From the message where you said ship it to the merge of the last pull request that go-ahead covered. "
             "The median is the typical delivery.",
@@ -87,20 +85,18 @@ def _change(number: NumberThisWeek) -> str:
     return "<div class=number-change>Same as the week before</div>"
 
 
-def _work_on_this(number: NumberThisWeek, week: str, started: Collection[str]) -> str:
+def _work_on_this(number: NumberThisWeek, week: str) -> str:
     if not number.got_worse:
         return ""
-    if work_key(number.key, week) in started:
-        return f"<span class='work-on-this asked' title='{ALREADY_ASKED_TIP}'>{WORK_ON_THIS}</span>"
     return (f"<a class=work-on-this title='{WORK_ON_THIS_TIP}' href='{ASKED_AT}{number.key}/{week}' "
-            f"onclick=\"this.classList.add('asked')\">{WORK_ON_THIS}</a>")
+            f">{WORK_ON_THIS}</a>")
 
 
-def _number(number: NumberThisWeek, week: str, started: Collection[str]) -> str:
+def _number(number: NumberThisWeek, week: str) -> str:
     return (f"<div class=number data-tip='{tip(NUMBER_NAMES[number.key], [COUNTED_HOW[number.key]])}'>"
             f"<div class=number-name>{NUMBER_NAMES[number.key]}</div>"
             f"<div class=number-value>{_shown(number.key, number.value)}</div>{_change(number)}"
-            f"{_work_on_this(number, week, started)}</div>")
+            f"{_work_on_this(number, week)}</div>")
 
 
 def _taken_back(rows: list[dict]) -> str:
@@ -111,14 +107,14 @@ def _taken_back(rows: list[dict]) -> str:
     return f"<section class=taken-back><div class=taken-back-heading>{TAKEN_BACK_HEADING}</div><ul>{items}</ul></section>"
 
 
-def ship_time_row(record: ShipTimeRecord | None, now: datetime, started: Collection[str] = ()) -> str:
+def ship_time_row(record: ShipTimeRecord | None, now: datetime) -> str:
     if record is None:
         return f"<section class=ship-time><div class=ship-time-heading>{MEASURING_WORDS}</div></section>"
     last, before = last_finished_weeks(record.weeks, now)
     if last is None:
         return ("<section class=ship-time><div class=ship-time-heading>Ship Time: no finished week yet</div></section>"
                 f"{_taken_back(record.taken_back)}")
-    numbers = "".join(_number(number, last["week"], started) for number in numbers_of(last, before))
+    numbers = "".join(_number(number, last["week"]) for number in numbers_of(last, before))
     return (f"<section class=ship-time><div class=ship-time-heading>Ship Time, week of {day_words(monday_of(last['week']))}"
             f"</div><div class=numbers>{numbers}</div></section>{_taken_back(record.taken_back)}")
 
@@ -131,10 +127,9 @@ def _weeks_of(record: ShipTimeRecord | None) -> str:
 class AroundTheChart:
     refresh_s: int | None = None
     ship_time: ShipTimeRecord | None = None
-    sessions_started: Collection[str] = ()
 
     def above_the_chart(self, now: datetime) -> str:
-        return ship_time_row(self.ship_time, now, self.sessions_started)
+        return ship_time_row(self.ship_time, now)
 
     def below_the_chart(self) -> str:
         return _weeks_of(self.ship_time)
@@ -144,7 +139,7 @@ NOTHING_AROUND_THE_CHART = AroundTheChart()
 
 
 def read_around_the_chart(state: Path, refresh_s: int | None) -> AroundTheChart:
-    return AroundTheChart(refresh_s, read_the_record(state / RECORD_NAME), read_sessions(state / SESSIONS_NAME))
+    return AroundTheChart(refresh_s, read_the_record(state / RECORD_NAME))
 
 
 SHIP_TIME_STYLE = f"""
@@ -161,7 +156,6 @@ SHIP_TIME_STYLE = f"""
   font-size:{in_pixels(SIZE_SMALL)}px; border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px;
   padding:{BUTTON_PAD_V}px {BUTTON_PAD_H_TIGHT}px; cursor:pointer }}
 .work-on-this:hover {{ background:var(--pressed) }}
-.work-on-this.asked {{ color:var(--muted); background:transparent; cursor:default; pointer-events:none }}
 .taken-back {{ margin:0 0 {GAP_DIALOG}px; font-size:{in_pixels(SIZE_BODY)}px }}
 .taken-back ul {{ margin:0; padding-left:{GAP_DIALOG}px }}
 """ + WEEKS_STYLE
