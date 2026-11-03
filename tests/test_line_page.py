@@ -762,3 +762,12 @@ def test_a_run_is_in_view_from_its_end_or_while_it_goes_on():
     still_going = line_page.Run("a", "b", joined=since - timedelta(hours=9))
 
     assert [run.in_view(since, now) for run in (ended_before, ended_after, still_going)] == [False, True, True]
+
+
+def test_the_line_for_now_is_drawn_under_the_run_icons_and_over_the_bars():
+    now = T0 + timedelta(hours=1)
+    run = line_page.Run("a session", "1 test", T0, None, got_the_machine=T0)
+
+    chart = _chart(line_page.render([run], [run], now=now), hours=4)
+
+    assert chart.index("class=ran") < chart.index("class=now") < chart.index("class='icon")
