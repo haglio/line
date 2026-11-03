@@ -1,6 +1,7 @@
 {
   "chain_length": {},
   "class_attributes": {},
+  "externality_comments": {},
   "fan_out": {},
   "library_patches": {},
   "methods": {},
@@ -12,10 +13,7 @@
   "patches": {},
   "private_imports": {},
   "private_reaches": {},
-  "prose_lines": {
-    "tests/test_family_look.py": 1,
-    "tests/test_line_tray.py": 1
-  },
+  "prose_lines": {},
   "reach_chains": {
     "line/line_tray.py": 7
   },
@@ -23,6 +21,7 @@
   "statements": {
     "line/line_page.py": 408
   },
+  "trailing_comments": {},
   "uncovered_lines": {
     "line/__main__.py": 3,
     "line/line_page.py": 25,

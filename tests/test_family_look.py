@@ -1,4 +1,3 @@
-"""Line wears the family's look: shared_ui's colors, icons, lettering and spacing, none of its own."""
 from __future__ import annotations
 
 from pathlib import Path
