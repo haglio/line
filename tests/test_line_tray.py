@@ -21,11 +21,24 @@ from line import line_page, line_tray
 
 
 @pytest.fixture(scope="module")
-def offscreen_app():
+def offscreen_app(tmp_path_factory):
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
     app = QApplication.instance() or line_tray.application(["test_line_tray"], line_tray.this_copy(None))
     assert app.platformName() == "offscreen"
+    _start_the_web_engine(tmp_path_factory.mktemp("web-engine"))
     return app
+
+
+def _start_the_web_engine(place: Path) -> None:
+    page = place / "line.html"
+    page.write_text("<!doctype html><title>Line</title>", encoding="utf-8")
+    profile = line_tray.web_profile(place / "storage")
+    view = line_tray.open_window(page, profile, line_tray.this_copy(None), _nothing_asked)
+    view.show()
+    try:
+        assert _page_named(view, "Line", seconds=120), "the web engine never loaded its first page"
+    finally:
+        _closed(view)
 
 
 def _page_named(view, title: str, seconds: float = 10) -> bool:
