@@ -61,3 +61,35 @@ def test_ship_time_is_measured_in_a_process_of_its_own_into_line_s_state():
         Path("made-up-state"), start=lambda command, **_: started.append(command) or Started()).in_background()
 
     assert started == [[sys.executable, "-m", "line.ship_time", "--out", str(Path("made-up-state") / "ship_time.json")]]
+
+
+class FakeRequest:
+    def __init__(self, url):
+        self._url = url
+        self.rejected = False
+
+    def url(self):
+        return self
+
+    def toString(self):
+        return self._url
+
+    def reject(self):
+        self.rejected = True
+
+
+def test_a_press_of_work_on_this_is_answered_and_kept_off_the_page():
+    asked, request = [], FakeRequest("https://line-work.invalid/crashes/2026-W44")
+
+    ship_time_tray.answer_a_press_of_work_on_this(request, lambda number, week: asked.append((number, week)))
+
+    assert asked == [("crashes", "2026-W44")]
+    assert request.rejected
+
+
+def test_any_other_link_is_left_to_the_page():
+    request = FakeRequest("file:///made/up/line.html")
+
+    ship_time_tray.answer_a_press_of_work_on_this(request, lambda *_: None)
+
+    assert not request.rejected
