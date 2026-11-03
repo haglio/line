@@ -19,7 +19,7 @@ from app_support.siblings import primary_checkout_of
 from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import set_app_user_model_id
 from PyQt6.QtCore import Qt, QTimer, QUrl
-from PyQt6.QtGui import QColor, QIcon
+from PyQt6.QtGui import QColor, QDesktopServices, QIcon
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from PyQt6.QtWebEngineCore import QWebEngineProfile
 from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -44,9 +44,8 @@ from line.ship_time_tray import (
     CHECKOUT,
     OneAtATime,
     PageAskingForWork,
-    looking_after_sessions,
     measuring_ship_time,
-    start_the_work,
+    open_the_work,
 )
 
 PROGRAM = Path(__file__).resolve()
@@ -337,6 +336,10 @@ def main(argv: list[str] | None = None) -> int:
     return run_the_tray(app, copy, open_now=args.open)
 
 
+def _open_in_its_app(link: str) -> None:
+    QDesktopServices.openUrl(QUrl(link))
+
+
 def _build_the_window(copy: LineCopy, loading: Loading) -> LineWindow:
     loading_line, opening_the_window = (step for step, _weight in STEPS)
     loading.say(loading_line)
@@ -345,7 +348,7 @@ def _build_the_window(copy: LineCopy, loading: Loading) -> LineWindow:
     shown_as = replace(copy, title=title_until(copy, datetime.now(UTC).astimezone()))
     window = LineWindow(copy.page, open_window=lambda page: open_window(
                             page, profile, shown_as,
-                            lambda number, week: start_the_work(copy.state, number, week)),
+                            lambda number, week: open_the_work(copy.state, number, week, _open_in_its_app)),
                         write_now=writer.now, write_in_background=writer.in_background,
                         bring_to_front=bring_to_front)
     loading.say(opening_the_window)
@@ -407,8 +410,7 @@ def run_the_tray(app: QApplication, copy: LineCopy, *, open_now: bool) -> int:
     measuring = measuring_ship_time(copy.state)
     measuring.in_background()
     updates = watch_for_updates(copy, window, quit_this_copy=app.quit)
-    watching = looking_after_sessions(copy.state, tray)
-    kept_going = [every(line_page.WATCH_EVERY_S * 1000, window.refresh), every(ship_time_tray.LOOKED_FOR_FINISHED_SESSIONS_EVERY_MS, watching.tick),
+    kept_going = [every(line_page.WATCH_EVERY_S * 1000, window.refresh),
                   every(ship_time_tray.MEASURED_EVERY_MS, measuring.in_background),
                   *([every(UPDATE_CHECK_MS, updates.tick)] if updates is not None else [])]
     loading.done()
