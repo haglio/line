@@ -7,7 +7,7 @@
   "methods": {},
   "mocks": {},
   "monkeypatches": {
-    "tests/test_line_tray.py": 2
+    "tests/test_line_tray.py": 1
   },
   "mutables_imported": {},
   "patches": {},
@@ -15,16 +15,16 @@
   "private_reaches": {},
   "prose_lines": {},
   "reach_chains": {
-    "line/line_tray.py": 7
+    "line/line_tray.py": 6
   },
   "simple_namespaces": {},
   "statements": {
-    "line/line_page.py": 408
+    "line/line_page.py": 362
   },
   "trailing_comments": {},
   "uncovered_lines": {
     "line/__main__.py": 3,
     "line/line_page.py": 25,
-    "line/line_tray.py": 81
+    "line/line_tray.py": 78
   }
 }
