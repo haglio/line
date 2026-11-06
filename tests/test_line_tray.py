@@ -377,7 +377,39 @@ def test_the_window_gets_a_taskbar_button_of_its_own_not_one_shared_with_other_p
 
 
 def test_the_web_view_draws_without_the_graphics_card_so_a_fault_there_cannot_take_the_tray_down(offscreen_app):
-    assert offscreen_app.arguments()[1:] == ["--webEngineArgs", "--disable-gpu"]
+    assert offscreen_app.arguments()[1:] == ["--webEngineArgs", "--disable-gpu", "--use-gl=angle", "--use-angle=swiftshader"]
+
+
+_A_WINDOW_THAT_LOADS_ITS_PAGE_AND_CLOSES = """
+import os
+import sys
+from pathlib import Path
+from PyQt6.QtCore import QTimer
+from line import line_tray
+place = Path(sys.argv[1])
+page = place / "line.html"
+page.write_text("<!doctype html><title>Line</title><canvas id=c></canvas>"
+                "<script>document.getElementById('c').getContext('2d').fillRect(0, 0, 9, 9)</script>",
+                encoding="utf-8")
+app = line_tray.application([sys.argv[0]], line_tray.this_copy(None))
+profile = line_tray.web_profile(place / "storage")
+view = line_tray.open_window(page, profile, line_tray.this_copy(None), lambda *_: None)
+view.loadFinished.connect(lambda loaded: print("loaded" if loaded else "not loaded", flush=True))
+view.loadFinished.connect(lambda _: QTimer.singleShot(3000, app.quit))
+view.show()
+QTimer.singleShot(60_000, app.quit)
+app.exec()
+os._exit(0)
+"""
+
+
+def test_the_web_view_writes_no_error_or_warning_into_lines_log_as_it_draws_its_page(tmp_path):
+    shown = subprocess.run([sys.executable, "-c", _A_WINDOW_THAT_LOADS_ITS_PAGE_AND_CLOSES, str(tmp_path)], check=True,
+                           env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, capture_output=True,
+                           text=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+    assert shown.stdout.split() == ["loaded"], shown.stderr
+    assert [line for line in shown.stderr.splitlines() if ":ERROR:" in line or ":WARNING:" in line] == []
 
 
 STATE = line_tray.CHECKOUT / "state"
