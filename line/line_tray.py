@@ -55,7 +55,7 @@ LINE_FILES = (PROGRAM, *(Path(module.__file__).resolve() for module in (
     ship_time_work)), ICON)
 WINDOW_SIZE = (1240, 860)
 ASFW_ANY = -1
-WEB_VIEW_ARGUMENTS = ["--webEngineArgs", "--disable-gpu"]
+WEB_VIEW_ARGUMENTS = ["--webEngineArgs", "--disable-gpu", "--use-gl=angle", "--use-angle=swiftshader"]
 TASKBAR_IDENTITY = "Local.Line"
 SERVER = "line_tray"
 PREVIEW_SERVER = "line_tray_preview"
