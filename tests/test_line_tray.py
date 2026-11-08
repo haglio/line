@@ -269,7 +269,7 @@ def test_an_update_waits_while_lines_window_is_showing(an_update_waiting):
     assert an_update_waiting == []
 
 
-def test_a_preview_keeps_no_watch_for_updates():
+def test_a_preview_keeps_no_watch_for_updates_since_it_runs_on_the_production_checkouts_venv_and_hands_the_work_back_within_the_hour():
     preview = line_tray.this_copy(Preview(feature="a new column"))
 
     assert line_tray.watch_for_updates(preview, _Window(showing=False), quit_this_copy=lambda: None) is None
