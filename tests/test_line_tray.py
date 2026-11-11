@@ -8,12 +8,12 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-import PyQt6
+import PySide6
 import pytest
 from app_support.testing import start_again_stand_in, update_waiting_for
-from PyQt6.QtCore import QEvent, QLibraryInfo, Qt, QUrl
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtCore import QEvent, QLibraryInfo, Qt, QUrl
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication
 from shared_ui.foreground import bring_to_front
 from shared_ui.palette import MAGENTA, PREVIEW_INK
 from shared_ui.preview import Preview
@@ -360,7 +360,7 @@ def test_a_window_he_closes_is_gone_so_the_next_show_opens_a_fresh_one(offscreen
 def test_these_tests_run_the_window_on_the_qt_line_itself_runs_on(offscreen_app):
     qt_home = Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.PrefixPath)).resolve()
 
-    assert qt_home.is_relative_to(Path(PyQt6.__file__).parent.resolve())
+    assert qt_home.is_relative_to(Path(PySide6.__file__).parent.resolve())
 
 
 def _taskbar_identity() -> str:
@@ -384,7 +384,7 @@ _A_WINDOW_THAT_LOADS_ITS_PAGE_AND_CLOSES = """
 import os
 import sys
 from pathlib import Path
-from PyQt6.QtCore import QTimer
+from PySide6.QtCore import QTimer
 from line import line_tray
 place = Path(sys.argv[1])
 page = place / "line.html"
@@ -458,8 +458,8 @@ def test_a_preview_window_keeps_its_title_after_its_page_names_itself(offscreen_
 
 SENDS_A_REQUEST_AND_HANGS_UP = """
 import sys
-from PyQt6.QtCore import QCoreApplication
-from PyQt6.QtNetwork import QLocalSocket
+from PySide6.QtCore import QCoreApplication
+from PySide6.QtNetwork import QLocalSocket
 app = QCoreApplication([])
 sender = QLocalSocket()
 sender.connectToServer(sys.argv[1])
@@ -614,8 +614,8 @@ def test_the_last_line_line_writes_gives_the_code_it_exits_with(caplog):
 RUNS_LINE_AND_QUITS_IT_FROM_ITS_TRAY_MENU = """
 import sys
 from pathlib import Path
-from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QApplication, QMenu
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication, QMenu
 from line import line_tray
 copy = line_tray.LineCopy("Line", sys.argv[1], "Local.Line.Test", Path(sys.argv[2]), None)
 app = line_tray.application(["line_test"], copy)

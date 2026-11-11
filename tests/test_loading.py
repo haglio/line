@@ -12,7 +12,7 @@ STARTS_LINE_THROUGH_A_LOADING_SCREEN = """
 import json, sys
 from pathlib import Path
 from unittest.mock import patch
-from PyQt6.QtCore import QTimer
+from PySide6.QtCore import QTimer
 from shared_ui.loading_window import LoadingCanceled
 from shared_ui.testing import loading_at_the_click
 from line import line_tray
