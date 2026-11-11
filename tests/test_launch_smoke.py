@@ -43,7 +43,7 @@ def test_the_launch_imports_everything_it_names():
 
 
 def test_the_walk_reaches_the_page_and_the_window_the_tray_imports():
-    assert_the_walk_reached(_launch_imports(), ("from line import line_page", "PyQt6.QtWebEngineWidgets"))
+    assert_the_walk_reached(_launch_imports(), ("from line import line_page", "PySide6.QtWebEngineWidgets"))
 
 
 @runs_the_launcher

@@ -18,12 +18,12 @@ from app_support.logging_utils import configure_logging, install_exception_loggi
 from app_support.siblings import primary_checkout_of
 from app_support.subprocess_utils import hidden_subprocess_kwargs
 from app_support.win32 import set_app_user_model_id
-from PyQt6.QtCore import Qt, QTimer, QUrl
-from PyQt6.QtGui import QColor, QDesktopServices, QIcon
-from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-from PyQt6.QtWebEngineCore import QWebEngineProfile
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QColor, QDesktopServices, QIcon
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from PySide6.QtWebEngineCore import QWebEngineProfile
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 from shared_ui import running_copy
 from shared_ui.foreground import bring_to_front
 from shared_ui.loading_window import Loading, LoadingCanceled
