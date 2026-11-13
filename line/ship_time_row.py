@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from shared_ui.alert import WORK_ON_THIS, WORK_ON_THIS_TIP
 from shared_ui.spacing import (
     BUTTON_PAD_H_TIGHT,
     BUTTON_PAD_V,
@@ -27,8 +28,6 @@ NUMBER_NAMES = {MEDIAN: "Median ship time", SLOWEST_TENTH: "Slowest tenth", BUGS
                 CRASHES: "App crashes"}
 MEASURING_WORDS = "Ship Time: measuring the weeks, which takes a minute or two the first time."
 TAKEN_BACK_HEADING = "Taken back by the main verifier and not shipped again"
-WORK_ON_THIS = "Work on this"
-WORK_ON_THIS_TIP = "Opens a new session in Claude Desktop with what to look into typed in, ready to send"
 COUNTED_HOW = {
     MEDIAN: "From the message where you said ship it to the merge of the last pull request that go-ahead covered. "
             "The median is the typical delivery.",
