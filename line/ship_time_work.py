@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import quote
+
+from app_support.claude_sessions import new_session_link as claude_desktop_link
 
 from line.ship_time import RECORD_NAME, read_the_record
 
 ASKED_AT = "https://line-work.invalid/"
-NEW_SESSION_IN_CLAUDE_DESKTOP = "claude://code/new"
 
 WHERE_THE_TIME_GOES = (
     "Find where the time after his go-ahead went for that week's deliveries. The usual places are GitHub's checks and "
@@ -58,4 +58,4 @@ def new_session_link(state: Path, number: str, week: str, folder: Path) -> str |
     except ValueError:
         return None
     brief = session_brief(number, week, last.get(number), before.get(number))
-    return f"{NEW_SESSION_IN_CLAUDE_DESKTOP}?folder={quote(str(folder), safe='')}&q={quote(brief, safe='')}"
+    return claude_desktop_link(folder, brief)
