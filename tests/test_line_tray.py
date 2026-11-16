@@ -15,6 +15,7 @@ from PySide6.QtCore import QEvent, QLibraryInfo, Qt, QUrl
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 from shared_ui.foreground import bring_to_front
+from shared_ui.gui_thread_collection import GuiThreadCollection
 from shared_ui.palette import MAGENTA, PREVIEW_INK
 from shared_ui.preview import Preview
 
@@ -370,6 +371,11 @@ def _taskbar_identity() -> str:
         return ctypes.wstring_at(claimed.value) if claimed.value else ""
     finally:
         ctypes.windll.ole32.CoTaskMemFree(claimed)
+
+
+def test_lines_application_collects_cycles_on_its_gui_thread(offscreen_app):
+    assert not gc.isenabled()
+    assert offscreen_app.findChild(GuiThreadCollection) is not None
 
 
 def test_the_window_gets_a_taskbar_button_of_its_own_not_one_shared_with_other_python_programs(offscreen_app):
