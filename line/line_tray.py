@@ -26,6 +26,7 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 from shared_ui import running_copy
 from shared_ui.foreground import bring_to_front
+from shared_ui.gui_thread_collection import the_application
 from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
 from shared_ui.preview_icon import app_icon
@@ -125,7 +126,7 @@ def hand_back(start: Callable[..., object] = subprocess.Popen) -> None:
 def application(argv: list[str], copy: LineCopy) -> QApplication:
     with contextlib.suppress(OSError):
         set_app_user_model_id(copy.app_user_model_id)
-    app = QApplication([*argv[:1], *WEB_VIEW_ARGUMENTS])
+    app = the_application(QApplication, [*argv[:1], *WEB_VIEW_ARGUMENTS])
     app.setQuitOnLastWindowClosed(False)
     app.commitDataRequest.connect(lambda: _log.info("Windows announced that his session is ending"))
     return app
