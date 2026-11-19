@@ -34,13 +34,13 @@ SYSTEM_REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTAL
 class Session:
     accepted: list[datetime] = field(default_factory=list)
     opened: set[tuple[str, int]] = field(default_factory=set)
-    first_words: str | None = None
     started: datetime | None = None
+    reports_a_bug: bool = False
+    pull_requests_being_opened: set[str] = field(default_factory=set)
 
-    @property
-    def reports_a_bug(self) -> bool:
-        return (self.first_words is not None and not AGENT_BRIEF.search(self.first_words)
-                and bool(SOMETHING_BROKE.search(own_words(self.first_words))))
+
+def _reports_a_bug(first_words: str) -> bool:
+    return not AGENT_BRIEF.search(first_words) and bool(SOMETHING_BROKE.search(own_words(first_words)))
 
 
 def _when(record: dict) -> datetime:
@@ -166,9 +166,9 @@ def _records(lines: Iterable[str]) -> Iterable[dict]:
             yield record
 
 
-def read_session(lines: Iterable[str]) -> Session:
-    session = Session()
-    pr_creations = set()
+def read_session(lines: Iterable[str], session: Session | None = None) -> Session:
+    session = Session() if session is None else session
+    pr_creations = session.pull_requests_being_opened
     for record in _records(lines):
         blocks = _blocks(record) or []
         if record.get("type") == "assistant":
@@ -183,20 +183,75 @@ def read_session(lines: Iterable[str]) -> Session:
         text = his_text(record)
         if text is None:
             continue
-        if session.first_words is None:
-            session.first_words, session.started = text, _when(record)
+        if session.started is None:
+            session.started, session.reports_a_bug = _when(record), _reports_a_bug(text)
         if GO_AHEAD.search(own_words(text)):
             session.accepted.append(_when(record))
     return session
 
 
-def _sessions_since(since: datetime, projects: Path) -> list[Session]:
-    sessions = []
+@dataclass
+class TranscriptRead:
+    size: int
+    whole_lines_end: int
+    session: Session
+
+
+def _read_on(path: Path, size: int, before: TranscriptRead | None) -> TranscriptRead:
+    if before is not None and before.size == size:
+        return before
+    if before is None or before.whole_lines_end > size:
+        before = TranscriptRead(0, 0, Session())
+    with path.open("rb") as handle:
+        handle.seek(before.whole_lines_end)
+        gained = handle.read()
+    whole = gained[:gained.rfind(b"\n") + 1]
+    read_session(whole.decode("utf-8", errors="replace").splitlines(), before.session)
+    return TranscriptRead(size, before.whole_lines_end + len(whole), before.session)
+
+
+def _sessions_since(since: datetime, projects: Path, kept: dict[str, TranscriptRead]) -> list[Session]:
+    still_in_view = {}
     for path in projects.glob("*haglio*/*.jsonl"):
-        if datetime.fromtimestamp(path.stat().st_mtime, UTC) >= since:
-            with path.open(encoding="utf-8", errors="replace") as handle:
-                sessions.append(read_session(handle))
-    return sessions
+        found = path.stat()
+        if datetime.fromtimestamp(found.st_mtime, UTC) >= since:
+            still_in_view[str(path)] = _read_on(path, found.st_size, kept.get(str(path)))
+    kept.clear()
+    kept.update(still_in_view)
+    return [read.session for read in still_in_view.values()]
+
+
+TRANSCRIPTS_READ_NAME = "ship_time_transcripts_read.json"
+
+
+def _as_kept(read: TranscriptRead) -> dict:
+    session = read.session
+    return {"size": read.size, "whole_lines_end": read.whole_lines_end,
+            "accepted": [when.isoformat() for when in session.accepted], "opened": sorted(session.opened),
+            "started": session.started.isoformat() if session.started else None,
+            "reports_a_bug": session.reports_a_bug,
+            "pull_requests_being_opened": sorted(session.pull_requests_being_opened)}
+
+
+def _as_read(kept: dict) -> TranscriptRead:
+    return TranscriptRead(kept["size"], kept["whole_lines_end"], Session(
+        accepted=[datetime.fromisoformat(when) for when in kept["accepted"]],
+        opened={(repo, number) for repo, number in kept["opened"]},
+        started=datetime.fromisoformat(kept["started"]) if kept["started"] else None,
+        reports_a_bug=kept["reports_a_bug"],
+        pull_requests_being_opened=set(kept["pull_requests_being_opened"])))
+
+
+def read_what_was_read(path: Path) -> dict[str, TranscriptRead]:
+    try:
+        return {transcript: _as_read(kept)
+                for transcript, kept in json.loads(path.read_text(encoding="utf-8")).items()}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+def keep_what_was_read(path: Path, kept: dict[str, TranscriptRead]) -> None:
+    write_whole(path, json.dumps({transcript: _as_kept(read) for transcript, read in kept.items()}))
 
 
 def _windows_crashes(since: datetime, run, now: datetime) -> list[datetime]:
@@ -212,10 +267,11 @@ def _start_of_week(weeks_back: int, now: datetime) -> datetime:
     return today - timedelta(days=today.weekday(), weeks=weeks_back - 1)
 
 
-def measure(weeks: int, *, projects: Path, run=subprocess.run, now: datetime | None = None) -> list[dict]:
+def measure(weeks: int, *, projects: Path, run=subprocess.run, now: datetime | None = None,
+            kept: dict[str, TranscriptRead] | None = None) -> list[dict]:
     now = now or datetime.now(UTC)
     since = _start_of_week(weeks, now)
-    sessions = _sessions_since(since, projects)
+    sessions = _sessions_since(since, projects, {} if kept is None else kept)
     merged = merge_times({pull_request for session in sessions for pull_request in session.opened}, run)
     found = [delivery for session in sessions
              for delivery in deliveries(session.accepted, [merged[pr] for pr in session.opened if pr in merged])
@@ -286,8 +342,11 @@ def update_the_record(path: Path, *, projects: Path, fun_time: Path, run=subproc
     except (OSError, ValueError, KeyError, TypeError):
         weeks = {}
     how_many = WEEKS_MEASURED_AFTER_THAT if weeks else WEEKS_MEASURED_THE_FIRST_TIME
-    for row in measure(how_many, projects=projects, run=run, now=now):
+    already_read = path.with_name(TRANSCRIPTS_READ_NAME)
+    kept = read_what_was_read(already_read)
+    for row in measure(how_many, projects=projects, run=run, now=now, kept=kept):
         weeks[row["week"]] = {**row, "measured_at": now.isoformat(timespec="seconds")}
+    keep_what_was_read(already_read, kept)
     incidents = main_verifier_record.read_incidents(fun_time / "state")
     write_whole(path, json.dumps({"weeks": weeks, "taken_back": not_shipped_again(incidents, fun_time, run)}, indent=1))
 
