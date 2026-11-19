@@ -181,7 +181,7 @@ def test_measure_counts_a_week_from_the_transcripts_github_and_the_crash_log(tmp
         a_command("c1", "gh pr create --draft", T0 - minutes(5)),
         its_output("c1", "https://github.com/haglio/fun_time/pull/7", T0 - minutes(5)),
         his_message("the main player crashed", T0 - minutes(1)),
-        his_message("ship it", T0)]), encoding="utf-8")
+        his_message("ship it", T0)]) + "\n", encoding="utf-8")
     machine = FakeMachine({("fun_time", 7): (T0 + minutes(30)).isoformat()},
                           crash_record("2026-10-05T19:42:03.1670000Z", "Application Error", "pythonw.exe"))
 
@@ -267,7 +267,7 @@ def test_the_record_keeps_older_weeks_and_measures_only_the_latest_two_after_the
                       encoding="utf-8")
     projects = tmp_path / "projects" / "C--made-up-haglio-app"
     projects.mkdir(parents=True)
-    (projects / "bug.jsonl").write_text(his_message("the main player crashed", T0), encoding="utf-8")
+    (projects / "bug.jsonl").write_text(his_message("the main player crashed", T0) + "\n", encoding="utf-8")
 
     ship_time.update_the_record(record, projects=tmp_path / "projects", fun_time=fun_time_folder(tmp_path / "ft"),
                                 run=FakeFunTime(), now=LATER)
@@ -315,3 +315,70 @@ def test_the_command_says_when_github_did_not_answer(tmp_path):
 
     assert ship_time.main(["--out", str(tmp_path / "out.json")], update=refuses) == 1
     assert ship_time.main(["--out", str(tmp_path / "out.json")], update=lambda *_a, **_k: None) == 0
+
+
+def _a_transcript_that_ships(tmp_path):
+    project = tmp_path / "C--made-up-haglio-app"
+    project.mkdir(parents=True)
+    transcript = project / "shipped.jsonl"
+    transcript.write_text("\n".join([
+        a_command("c1", "gh pr create --draft", T0 - minutes(5)),
+        its_output("c1", "https://github.com/haglio/fun_time/pull/7", T0 - minutes(5)),
+        his_message("the main player crashed", T0 - minutes(1))]) + "\n", encoding="utf-8")
+    return transcript
+
+
+def _measured(tmp_path, kept):
+    machine = FakeMachine({("fun_time", 7): (T0 + minutes(30)).isoformat()})
+    return ship_time.measure(1, projects=tmp_path, run=machine, now=T0 + timedelta(days=1), kept=kept)
+
+
+def _blanked(transcript):
+    transcript.write_bytes(b" " * (transcript.stat().st_size - 1) + b"\n")
+
+
+def test_only_what_a_transcript_gained_since_the_last_measure_is_read(tmp_path):
+    transcript = _a_transcript_that_ships(tmp_path)
+    kept = {}
+    _measured(tmp_path, kept)
+    _blanked(transcript)
+
+    with transcript.open("a", encoding="utf-8") as handle:
+        handle.write(his_message("ship it", T0) + "\n")
+
+    assert [(row["deliveries"], row["bug_reports"]) for row in _measured(tmp_path, kept)] == [(1, 1)]
+
+
+def test_a_transcript_unchanged_since_the_last_measure_is_not_read_again(tmp_path):
+    transcript = _a_transcript_that_ships(tmp_path)
+    with transcript.open("a", encoding="utf-8") as handle:
+        handle.write(his_message("ship it", T0) + "\n")
+    kept = {}
+    first = _measured(tmp_path, kept)
+    _blanked(transcript)
+
+    assert _measured(tmp_path, kept) == first
+
+
+def test_a_line_still_being_written_is_read_once_it_is_whole(tmp_path):
+    transcript = _a_transcript_that_ships(tmp_path)
+    go_ahead = his_message("ship it", T0) + "\n"
+    with transcript.open("a", encoding="utf-8") as handle:
+        handle.write(go_ahead[:9])
+    kept = {}
+    _measured(tmp_path, kept)
+
+    with transcript.open("a", encoding="utf-8") as handle:
+        handle.write(go_ahead[9:])
+
+    assert [row["deliveries"] for row in _measured(tmp_path, kept)] == [1]
+
+
+def test_what_was_read_is_kept_beside_the_record_for_the_next_measure(tmp_path):
+    _a_transcript_that_ships(tmp_path / "projects")
+    record = tmp_path / ship_time.RECORD_NAME
+
+    ship_time.update_the_record(record, projects=tmp_path / "projects", fun_time=fun_time_folder(tmp_path / "ft"),
+                                run=FakeFunTime(), now=LATER)
+
+    assert ship_time.read_what_was_read(tmp_path / ship_time.TRANSCRIPTS_READ_NAME) != {}
