@@ -6,7 +6,7 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from app_support import haglio_settings, siblings
+from app_support import haglio_settings, live_session, siblings
 from app_support.subprocess_utils import hidden_subprocess_kwargs
 
 from line import ship_time, ship_time_work
@@ -18,14 +18,17 @@ _log = logging.getLogger("line")
 
 
 class OneAtATime:
-    def __init__(self, command: list[str], *, start: Callable[..., subprocess.Popen] = subprocess.Popen):
+    def __init__(self, command: list[str], *, start: Callable[..., subprocess.Popen] = subprocess.Popen,
+                 may_start: Callable[[], bool] = lambda: True):
         self._command = command
         self._start = start
+        self._may_start = may_start
         self._has_ended: Callable[[], bool] = lambda: True
 
     def in_background(self) -> None:
-        if self._has_ended():
-            job = self._start(self._command, cwd=CHECKOUT, **hidden_subprocess_kwargs())
+        if self._has_ended() and self._may_start():
+            job = self._start(self._command, cwd=CHECKOUT,
+                              **hidden_subprocess_kwargs(creationflags=subprocess.BELOW_NORMAL_PRIORITY_CLASS))
             self._has_ended = lambda: job.poll() is not None
 
 
@@ -46,5 +49,7 @@ def open_the_work(state: Path, number: str, week: str, open_link: Callable[[str]
         open_link(link)
 
 
-def measuring_ship_time(state: Path, start: Callable[..., subprocess.Popen] = subprocess.Popen) -> OneAtATime:
-    return OneAtATime([sys.executable, "-m", "line.ship_time", "--out", str(state / ship_time.RECORD_NAME)], start=start)
+def measuring_ship_time(state: Path, start: Callable[..., subprocess.Popen] = subprocess.Popen, *,
+                        session_is_live: Callable[[], bool] = live_session.is_live) -> OneAtATime:
+    return OneAtATime([sys.executable, "-m", "line.ship_time", "--out", str(state / ship_time.RECORD_NAME)], start=start,
+                      may_start=lambda: not session_is_live())
