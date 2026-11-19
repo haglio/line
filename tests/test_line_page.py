@@ -771,3 +771,14 @@ def test_the_line_for_now_is_drawn_under_the_run_icons_and_over_the_bars():
     chart = _chart(line_page.render([run], [run], now=now), hours=4)
 
     assert chart.index("class=ran") < chart.index("class=now") < chart.index("class='icon")
+
+
+def test_the_page_never_opens_the_records_of_runs_that_joined_days_before_the_view(tmp_path):
+    for days_ago in range(4):
+        joined = 60 * 24 * -days_ago
+        write_run(tmp_path, record(f"claude/run-{days_ago}", joined=joined, pid=20 + days_ago,
+                                   got_the_machine=minute(joined + 1), ended=minute(30), exit_code=0))
+
+    runs = line_page.runs_in_view(tmp_path, since=minute(-60), now=minute(60))
+
+    assert [run.who for run in runs] == ["run 1", "run 0"]

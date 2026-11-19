@@ -645,12 +645,15 @@ def fun_time() -> Path:
     return siblings.project_dir("fun_time", haglio_settings.project_roots())
 
 
+def runs_in_view(folder: Path, *, since: datetime, now: datetime) -> list[Run]:
+    return [run for run in runs_from(integration_runs.read_runs(folder, since=since)) if run.in_view(since, now)]
+
+
 def write_the_page(page: Path, days: int, refresh_s: int | None) -> None:
     now = datetime.now().astimezone()
     since = now - timedelta(days=days)
     checkout = fun_time()
-    runs = [run for run in runs_from(integration_runs.read_runs(integration_runs.runs_dir(checkout)))
-            if run.in_view(since, now)]
+    runs = runs_in_view(integration_runs.runs_dir(checkout), since=since, now=now)
     names = session_names(PROJECTS, checkout / ".claude" / "worktrees", [run.checkout for run in runs],
                           [run.session for run in runs])
     page.parent.mkdir(parents=True, exist_ok=True)
