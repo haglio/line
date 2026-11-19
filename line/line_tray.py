@@ -315,7 +315,7 @@ def open_the_loading_screen(copy: LineCopy):
     from shared_ui.loading_process import LoadingProcess  # noqa: PLC0415
 
     return LoadingProcess.open(
-        caption="Line Loading", wordmark="Line", icon=ICON, preview=copy.preview, steps=STEPS,
+        caption="Line loading", wordmark="Line", icon=ICON, preview=copy.preview, steps=STEPS,
         cancel_hint="Press Esc to cancel opening Line", app_id=copy.app_user_model_id)
 
 
