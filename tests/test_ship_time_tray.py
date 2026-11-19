@@ -1,3 +1,4 @@
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import quote
@@ -58,9 +59,33 @@ def test_ship_time_is_measured_in_a_process_of_its_own_into_line_s_state():
     started = []
 
     ship_time_tray.measuring_ship_time(
-        Path("made-up-state"), start=lambda command, **_: started.append(command) or Started()).in_background()
+        Path("made-up-state"), start=lambda command, **_: started.append(command) or Started(),
+        session_is_live=lambda: False).in_background()
 
     assert started == [[sys.executable, "-m", "line.ship_time", "--out", str(Path("made-up-state") / "ship_time.json")]]
+
+
+def test_ship_time_waits_while_a_session_of_his_is_live_and_measures_once_none_is():
+    started, live = [], [True]
+    measuring = ship_time_tray.measuring_ship_time(
+        Path("made-up-state"), start=lambda command, **_: started.append(command) or Started(still_going=False),
+        session_is_live=lambda: live[0])
+
+    measuring.in_background()
+    live[0] = False
+    measuring.in_background()
+
+    assert len(started) == 1
+
+
+def test_ship_time_is_measured_below_normal_priority_so_what_he_is_using_comes_first():
+    flags = []
+
+    ship_time_tray.measuring_ship_time(
+        Path("made-up-state"), start=lambda command, **kwargs: flags.append(kwargs["creationflags"]) or Started(),
+        session_is_live=lambda: False).in_background()
+
+    assert flags[0] & subprocess.BELOW_NORMAL_PRIORITY_CLASS
 
 
 class FakeRequest:
