@@ -63,3 +63,8 @@ places = ["startup"]
 [tool.setuptools.packages.find]
 include = ["line*"]
 namespaces = false
+
+# The names the screen capitalizes inside sentence-case text
+# (app_support.sentence_case).
+[tool.haglio.sentence-case]
+names = ["Line", "Fun Time", "Origenerator"]

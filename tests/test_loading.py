@@ -67,5 +67,5 @@ def test_the_loading_screen_runs_in_a_process_of_its_own_wearing_lines_taskbar_b
         line_tray.open_the_loading_screen(copy)
 
     opened.assert_called_once_with(
-        caption="Line Loading", wordmark="Line", icon=line_tray.ICON, preview=None, steps=line_tray.STEPS,
+        caption="Line loading", wordmark="Line", icon=line_tray.ICON, preview=None, steps=line_tray.STEPS,
         cancel_hint="Press Esc to cancel opening Line", app_id=copy.app_user_model_id)
