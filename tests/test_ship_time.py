@@ -82,14 +82,18 @@ def test_each_week_has_its_median_and_slowest_tenth_beside_what_got_through():
     monday = datetime(2026, 10, 5, 12, tzinfo=UTC)
     deliveries = [(monday + timedelta(hours=i), minutes(m)) for i, m in enumerate([10, 20, 30, 40, 200])]
 
+    to_production = [(monday + timedelta(days=7), minutes(m)) for m in (60, 420)]
+
     rows = ship_time.weekly(deliveries, bug_reports=[monday], crashes=[monday, monday + timedelta(days=7)],
-                               zone=UTC)
+                            to_production=to_production, zone=UTC)
 
     assert rows == [
         {"week": "2026-W41", "deliveries": 5, "median_minutes": 30, "slowest_tenth_minutes": 200,
-         "bug_reports": 1, "crashes": 1},
+         "bug_reports": 1, "crashes": 1, "taken_by_production": 0, "to_production_median_minutes": None,
+         "to_production_slowest_tenth_minutes": None},
         {"week": "2026-W42", "deliveries": 0, "median_minutes": None, "slowest_tenth_minutes": None,
-         "bug_reports": 0, "crashes": 1},
+         "bug_reports": 0, "crashes": 1, "taken_by_production": 2, "to_production_median_minutes": 240,
+         "to_production_slowest_tenth_minutes": 420},
     ]
 
 
@@ -164,13 +168,19 @@ def test_the_pull_requests_a_session_opened_are_the_ones_gh_pr_create_printed():
 
 
 class FakeMachine(FakeGitHub):
-    def __init__(self, merged, crash_log=""):
+    def __init__(self, merged, crash_log="", fun_time_merged="[]", main="", production=""):
         super().__init__(merged)
         self.crash_log = crash_log
+        self.fun_time_merged, self.main, self.production = fun_time_merged, main, production
 
     def __call__(self, command, **kwargs):
         if command[0] == "wevtutil":
             return subprocess.CompletedProcess(command, 0, stdout=self.crash_log, stderr="")
+        if command[:2] == ["gh", "pr"]:
+            return subprocess.CompletedProcess(command, 0, stdout=self.fun_time_merged, stderr="")
+        if command[0] == "git":
+            told = self.production if "reflog" in command else self.main
+            return subprocess.CompletedProcess(command, 0, stdout=told, stderr="")
         return super().__call__(command, **kwargs)
 
 
@@ -183,12 +193,16 @@ def test_measure_counts_a_week_from_the_transcripts_github_and_the_crash_log(tmp
         his_message("the main player crashed", T0 - minutes(1)),
         his_message("ship it", T0)]) + "\n", encoding="utf-8")
     machine = FakeMachine({("fun_time", 7): (T0 + minutes(30)).isoformat()},
-                          crash_record("2026-10-05T19:42:03.1670000Z", "Application Error", "pythonw.exe"))
+                          crash_record("2026-10-05T19:42:03.1670000Z", "Application Error", "pythonw.exe"),
+                          fun_time_merged=json.dumps([{"mergedAt": (T0 + minutes(30)).isoformat(),
+                                                       "mergeCommit": {"oid": "c7"}}]),
+                          main="c6\nc7\n", production=f"c7\tHEAD@{{{(T0 + minutes(150)).isoformat()}}}\n")
 
-    rows = ship_time.measure(1, projects=tmp_path, run=machine, now=T0 + timedelta(days=1))
+    rows = ship_time.measure(1, projects=tmp_path, fun_time=Path("made-up"), run=machine, now=T0 + timedelta(days=1))
 
     assert rows == [{"week": "2026-W41", "deliveries": 1, "median_minutes": 30, "slowest_tenth_minutes": 30,
-                     "bug_reports": 1, "crashes": 1}]
+                     "bug_reports": 1, "crashes": 1, "taken_by_production": 1, "to_production_median_minutes": 120,
+                     "to_production_slowest_tenth_minutes": 120}]
 
 
 LATER = T0 + timedelta(days=1)
@@ -222,6 +236,8 @@ class FakeFunTime:
             return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
         if not self.github_up:
             return subprocess.CompletedProcess(command, 1, stdout="", stderr="no route")
+        if command[:2] == ["gh", "pr"]:
+            return subprocess.CompletedProcess(command, 0, stdout="[]", stderr="")
         return subprocess.CompletedProcess(command, 0, stdout=json.dumps(self._answer(command[-1])), stderr="")
 
 
@@ -263,8 +279,13 @@ def fun_time_folder(place, *incidents):
 
 def test_the_record_keeps_older_weeks_and_measures_only_the_latest_two_after_the_first_time(tmp_path):
     record = tmp_path / ship_time.RECORD_NAME
-    record.write_text(json.dumps({"weeks": {"2026-W30": {"week": "2026-W30", "crashes": 9}}, "taken_back": []}),
+    record.write_text(json.dumps({"weeks": {"2026-W30": {"week": "2026-W30", "crashes": 9,
+                                                         "to_production_median_minutes": None}}, "taken_back": []}),
                       encoding="utf-8")
+    old_bug = tmp_path / "projects" / "C--made-up-other-app"
+    old_bug.mkdir(parents=True)
+    (old_bug / "bug.jsonl").write_text(his_message("the main player crashed", T0 - timedelta(weeks=10)) + "\n",
+                                       encoding="utf-8")
     projects = tmp_path / "projects" / "C--made-up-haglio-app"
     projects.mkdir(parents=True)
     (projects / "bug.jsonl").write_text(his_message("the main player crashed", T0) + "\n", encoding="utf-8")
@@ -330,7 +351,8 @@ def _a_transcript_that_ships(tmp_path):
 
 def _measured(tmp_path, kept):
     machine = FakeMachine({("fun_time", 7): (T0 + minutes(30)).isoformat()})
-    return ship_time.measure(1, projects=tmp_path, run=machine, now=T0 + timedelta(days=1), kept=kept)
+    return ship_time.measure(1, projects=tmp_path, fun_time=Path("made-up"), run=machine, now=T0 + timedelta(days=1),
+                             kept=kept)
 
 
 def _blanked(transcript):
@@ -382,3 +404,18 @@ def test_what_was_read_is_kept_beside_the_record_for_the_next_measure(tmp_path):
                                 run=FakeFunTime(), now=LATER)
 
     assert ship_time.read_what_was_read(tmp_path / ship_time.TRANSCRIPTS_READ_NAME) != {}
+
+
+def test_a_record_kept_before_the_wait_to_production_was_measured_is_measured_again_in_full(tmp_path):
+    record = tmp_path / ship_time.RECORD_NAME
+    record.write_text(json.dumps({"weeks": {"2026-W30": {"week": "2026-W30", "crashes": 9}}, "taken_back": []}),
+                      encoding="utf-8")
+    projects = tmp_path / "projects" / "C--made-up-haglio-app"
+    projects.mkdir(parents=True)
+    (projects / "bug.jsonl").write_text(his_message("the main player crashed", T0 - timedelta(weeks=10)) + "\n",
+                                        encoding="utf-8")
+
+    ship_time.update_the_record(record, projects=tmp_path / "projects", fun_time=fun_time_folder(tmp_path / "ft"),
+                                run=FakeFunTime(), now=LATER)
+
+    assert "2026-W31" in [row["week"] for row in ship_time.read_the_record(record).weeks]

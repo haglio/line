@@ -104,3 +104,12 @@ def test_what_surrounds_the_chart_is_read_from_line_s_state(tmp_path):
 
     assert around.refresh_s == 30
     assert around.ship_time.weeks == [LAST_WEEK]
+
+
+def test_the_wait_to_production_has_its_median_and_slowest_tenth_compared_with_the_week_before():
+    shown = row({**WEEK_BEFORE, "to_production_median_minutes": 60, "to_production_slowest_tenth_minutes": 900},
+                {**LAST_WEEK, "to_production_median_minutes": 420, "to_production_slowest_tenth_minutes": 600})
+
+    assert "Median to production</div><div class=number-value>7.0 h" in shown
+    assert "Slowest tenth to production</div><div class=number-value>10.0 h" in shown
+    assert "href='https://line-work.invalid/to_production_median_minutes/2026-W44'" in shown

@@ -16,6 +16,9 @@ from pathlib import Path
 from app_support import haglio_settings, main_verifier_record, siblings
 from app_support.file_channel import write_whole
 
+from line import to_production
+from line.github import GitHubDidNotAnswer, ask_github
+
 LONGEST_DELIVERY = timedelta(hours=24)
 ONE_DELIVERY_SPREAD = timedelta(hours=6)
 PULL_REQUESTS_PER_QUERY = 40
@@ -78,20 +81,34 @@ def _slowest_tenth(values: list[float]) -> float:
     return ordered[math.ceil(0.9 * len(ordered)) - 1]
 
 
+def _in_minutes_by_week(durations: Iterable[tuple[datetime, timedelta]], zone) -> dict[str, list[float]]:
+    by_week = defaultdict(list)
+    for when, duration in durations:
+        by_week[_week(when, zone)].append(duration.total_seconds() / 60)
+    return by_week
+
+
+def _typical_and_slowest(minutes: list[float]) -> tuple[int | None, int | None]:
+    return (round(statistics.median(minutes)), round(_slowest_tenth(minutes))) if minutes else (None, None)
+
+
 def weekly(deliveries: Iterable[tuple[datetime, timedelta]], *, bug_reports: Iterable[datetime],
-           crashes: Iterable[datetime], zone=None) -> list[dict]:
-    took = defaultdict(list)
-    for accepted, duration in deliveries:
-        took[_week(accepted, zone)].append(duration.total_seconds() / 60)
+           crashes: Iterable[datetime], to_production: Iterable[tuple[datetime, timedelta]] = (),
+           zone=None) -> list[dict]:
+    took = _in_minutes_by_week(deliveries, zone)
+    waited = _in_minutes_by_week(to_production, zone)
     reported = Counter(_week(when, zone) for when in bug_reports)
     crashed = Counter(_week(when, zone) for when in crashes)
     rows = []
-    for week in sorted(set(took) | set(reported) | set(crashed)):
-        minutes = took.get(week, [])
-        rows.append({"week": week, "deliveries": len(minutes),
-                     "median_minutes": round(statistics.median(minutes)) if minutes else None,
-                     "slowest_tenth_minutes": round(_slowest_tenth(minutes)) if minutes else None,
-                     "bug_reports": reported[week], "crashes": crashed[week]})
+    for week in sorted(set(took) | set(waited) | set(reported) | set(crashed)):
+        minutes, production_minutes = took.get(week, []), waited.get(week, [])
+        median, slowest = _typical_and_slowest(minutes)
+        production_median, production_slowest = _typical_and_slowest(production_minutes)
+        rows.append({"week": week, "deliveries": len(minutes), "median_minutes": median,
+                     "slowest_tenth_minutes": slowest, "bug_reports": reported[week], "crashes": crashed[week],
+                     "taken_by_production": len(production_minutes),
+                     "to_production_median_minutes": production_median,
+                     "to_production_slowest_tenth_minutes": production_slowest})
     return rows
 
 
@@ -109,17 +126,6 @@ def family_crashes(windows_log: str) -> list[datetime]:
     return crashes
 
 
-class GitHubDidNotAnswer(Exception):
-    pass
-
-
-def _ask_github(fields: str, run) -> dict:
-    answer = run(["gh", "api", "graphql", "-f", f"query={{{fields}}}"], capture_output=True, text=True)
-    if answer.returncode:
-        raise GitHubDidNotAnswer(answer.stderr)
-    return json.loads(answer.stdout or "{}").get("data") or {}
-
-
 def merge_times(pull_requests: Iterable[tuple[str, int]], run=subprocess.run) -> dict[tuple[str, int], datetime]:
     asked = sorted(pull_requests)
     merged = {}
@@ -127,7 +133,7 @@ def merge_times(pull_requests: Iterable[tuple[str, int]], run=subprocess.run) ->
         batch = asked[start:start + PULL_REQUESTS_PER_QUERY]
         fields = " ".join(f'p{i}: repository(owner:"haglio",name:"{repo}"){{pullRequest(number:{number}){{mergedAt}}}}'
                           for i, (repo, number) in enumerate(batch))
-        data = _ask_github(fields, run)
+        data = ask_github(fields, run)
         for i, pull_request in enumerate(batch):
             merged_at = ((data.get(f"p{i}") or {}).get("pullRequest") or {}).get("mergedAt")
             if merged_at:
@@ -267,7 +273,7 @@ def _start_of_week(weeks_back: int, now: datetime) -> datetime:
     return today - timedelta(days=today.weekday(), weeks=weeks_back - 1)
 
 
-def measure(weeks: int, *, projects: Path, run=subprocess.run, now: datetime | None = None,
+def measure(weeks: int, *, projects: Path, fun_time: Path, run=subprocess.run, now: datetime | None = None,
             kept: dict[str, TranscriptRead] | None = None) -> list[dict]:
     now = now or datetime.now(UTC)
     since = _start_of_week(weeks, now)
@@ -277,7 +283,8 @@ def measure(weeks: int, *, projects: Path, run=subprocess.run, now: datetime | N
              for delivery in deliveries(session.accepted, [merged[pr] for pr in session.opened if pr in merged])
              if delivery[0] >= since]
     bug_reports = [session.started for session in sessions if session.reports_a_bug and session.started >= since]
-    return weekly(found, bug_reports=bug_reports, crashes=_windows_crashes(since, run, now))
+    return weekly(found, bug_reports=bug_reports, crashes=_windows_crashes(since, run, now),
+                  to_production=to_production.measure(fun_time, since=since, run=run))
 
 
 FUN_TIME_ON_GITHUB = 'repository(owner:"haglio",name:"fun_time")'
@@ -308,7 +315,7 @@ def not_shipped_again(incidents: list[dict], fun_time: Path, run=subprocess.run)
         f'a{number}: search(query:"repo:haglio/fun_time is:pr is:merged in:title \\"Ship #{number} again\\"",'
         f"type:ISSUE,first:1){{issueCount}}"
         for number, incident in taken_back.items())
-    data = _ask_github(fields, run)
+    data = ask_github(fields, run)
     return [{"pull_request": number, "title": data[f"p{number}"]["pullRequest"]["title"], "taken_back": incident["at"]}
             for number, incident in taken_back.items()
             if data[f"b{number}"]["pullRequest"]["mergedAt"] and not data[f"a{number}"]["issueCount"]
@@ -318,6 +325,7 @@ def not_shipped_again(incidents: list[dict], fun_time: Path, run=subprocess.run)
 RECORD_NAME = "ship_time.json"
 WEEKS_MEASURED_THE_FIRST_TIME = 26
 WEEKS_MEASURED_AFTER_THAT = 2
+MEASURED_LAST = "to_production_median_minutes"
 
 
 @dataclass(frozen=True)
@@ -334,6 +342,10 @@ def read_the_record(path: Path) -> ShipTimeRecord | None:
         return None
 
 
+def _measured_in_full(weeks: dict) -> bool:
+    return any(MEASURED_LAST in row for row in weeks.values())
+
+
 def update_the_record(path: Path, *, projects: Path, fun_time: Path, run=subprocess.run,
                       now: datetime | None = None) -> None:
     now = now or datetime.now(UTC)
@@ -341,10 +353,10 @@ def update_the_record(path: Path, *, projects: Path, fun_time: Path, run=subproc
         weeks = json.loads(path.read_text(encoding="utf-8"))["weeks"]
     except (OSError, ValueError, KeyError, TypeError):
         weeks = {}
-    how_many = WEEKS_MEASURED_AFTER_THAT if weeks else WEEKS_MEASURED_THE_FIRST_TIME
+    how_many = WEEKS_MEASURED_AFTER_THAT if _measured_in_full(weeks) else WEEKS_MEASURED_THE_FIRST_TIME
     already_read = path.with_name(TRANSCRIPTS_READ_NAME)
     kept = read_what_was_read(already_read)
-    for row in measure(how_many, projects=projects, run=run, now=now, kept=kept):
+    for row in measure(how_many, projects=projects, fun_time=fun_time, run=run, now=now, kept=kept):
         weeks[row["week"]] = {**row, "measured_at": now.isoformat(timespec="seconds")}
     keep_what_was_read(already_read, kept)
     incidents = main_verifier_record.read_incidents(fun_time / "state")
