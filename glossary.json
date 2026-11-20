@@ -164,7 +164,7 @@
       "his_word": "Ship Time",
       "code_word": "ship time",
       "id": "ship_time",
-      "thing": "the row across the top of the window with last week's four numbers",
+      "thing": "the row across the top of the window with last week's six numbers",
       "code_today": [
         "ship_time"
       ],
@@ -175,14 +175,29 @@
         "Median ship time",
         "Slowest tenth",
         "Bugs you reported",
-        "App crashes"
+        "App crashes",
+        "Median to production",
+        "Slowest tenth to production"
       ],
       "his_word": null,
       "code_word": "number",
       "id": "ship_time_number",
-      "thing": "one of the four boxes in the Ship Time row, its name above its value and how it compares with the week before",
+      "thing": "one of the six boxes in the Ship Time row, its name above its value and how it compares with the week before",
       "code_today": [
         "number"
+      ],
+      "status": "kept"
+    },
+    {
+      "screen": [
+        "Taken by production"
+      ],
+      "his_word": null,
+      "code_word": "to production",
+      "id": "to_production",
+      "thing": "how long a Fun Time change waits from shipping to Fun Time's main until production Fun Time takes it",
+      "code_today": [
+        "to_production"
       ],
       "status": "kept"
     },
@@ -206,7 +221,7 @@
       "his_word": null,
       "code_word": "ship time chart",
       "id": "ship_time_chart",
-      "thing": "the chart below the chart of runs with a line each for Median and Slowest tenth, week by week",
+      "thing": "the chart below the chart of runs with a line each for Median, Slowest tenth, Median to production and Slowest tenth to production, week by week",
       "code_today": [
         "ship_time_chart"
       ],

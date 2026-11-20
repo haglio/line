@@ -24,8 +24,12 @@ MEDIAN = "median_minutes"
 SLOWEST_TENTH = "slowest_tenth_minutes"
 BUGS = "bug_reports"
 CRASHES = "crashes"
+TO_PRODUCTION_MEDIAN = "to_production_median_minutes"
+TO_PRODUCTION_SLOWEST_TENTH = "to_production_slowest_tenth_minutes"
 NUMBER_NAMES = {MEDIAN: "Median ship time", SLOWEST_TENTH: "Slowest tenth", BUGS: "Bugs you reported",
-                CRASHES: "App crashes"}
+                CRASHES: "App crashes", TO_PRODUCTION_MEDIAN: "Median to production",
+                TO_PRODUCTION_SLOWEST_TENTH: "Slowest tenth to production"}
+TIMES = (MEDIAN, SLOWEST_TENTH, TO_PRODUCTION_MEDIAN, TO_PRODUCTION_SLOWEST_TENTH)
 MEASURING_WORDS = "Ship Time: measuring the weeks, which takes a minute or two the first time."
 TAKEN_BACK_HEADING = "Taken back by the main verifier and not shipped again"
 COUNTED_HOW = {
@@ -35,6 +39,9 @@ COUNTED_HOW = {
     BUGS: "Sessions you opened yourself to say something was broken, crashed, stuck or not working. Sessions another "
           "agent opened don't count.",
     CRASHES: "Crash reports Windows recorded for the family's apps on this machine.",
+    TO_PRODUCTION_MEDIAN: "From a Fun Time change shipping to production Fun Time taking it, which it does once the "
+                          "main verifier passes it. The median is the typical change.",
+    TO_PRODUCTION_SLOWEST_TENTH: "How long one Fun Time change in ten waited for production, counted the same way.",
 }
 
 
@@ -44,7 +51,7 @@ def _week_of(moment: datetime) -> str:
 
 
 def _shown(key: str, value: float | None) -> str:
-    if key in (MEDIAN, SLOWEST_TENTH):
+    if key in TIMES:
         return minutes_words(value)
     return NO_VALUE if value is None else str(value)
 
@@ -145,7 +152,7 @@ SHIP_TIME_STYLE = f"""
 .ship-time {{ margin:0 0 {GAP_DIALOG}px }}
 .ship-time-heading, .taken-back-heading {{ color:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px;
   margin:0 0 {GAP_SMALL}px }}
-.numbers {{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:{GAP_MEDIUM}px }}
+.numbers {{ display:grid; grid-template-columns:repeat({len(NUMBER_NAMES)}, minmax(0, 1fr)); gap:{GAP_MEDIUM}px }}
 .number {{ border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px;
   padding:{BUTTON_PAD_V}px {BUTTON_PAD_H_TIGHT}px }}
 .number-name, .number-change {{ color:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px }}

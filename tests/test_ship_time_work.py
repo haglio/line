@@ -48,3 +48,9 @@ def test_no_record_opens_nothing(tmp_path):
 
 def test_each_number_s_brief_says_what_to_find():
     assert ship_time_work.WHAT_GOT_THROUGH in ship_time_work.session_brief("bug_reports", "2026-W44", 9, 3)
+
+
+def test_the_wait_to_production_s_brief_sends_the_session_to_the_main_verifier():
+    assert ship_time_work.asked_for("https://line-work.invalid/to_production_slowest_tenth_minutes/2026-W44")
+    assert ship_time_work.WHERE_PRODUCTION_WAITED in ship_time_work.session_brief(
+        "to_production_median_minutes", "2026-W44", 420, 60)

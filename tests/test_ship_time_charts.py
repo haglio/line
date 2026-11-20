@@ -90,3 +90,27 @@ def test_the_ship_time_axis_reads_in_hours_when_the_numbers_are_large_and_in_min
 
 def test_weeks_with_nothing_shipped_draw_no_line():
     assert "<path" not in ship_time_chart([QUIET])
+
+
+WAITED = {**TWO, "taken_by_production": 30, "to_production_median_minutes": 60, "to_production_slowest_tenth_minutes": 420}
+
+
+def test_the_ship_time_chart_draws_the_wait_to_production_beside_the_ship_time():
+    chart = ship_time_chart([ONE, WAITED])
+
+    assert "<circle class=to-production-median" in chart
+    assert "Slowest tenth to production 7.0 h" in chart
+    assert "Taken by production: 30|Median to production: 60 min|Slowest tenth to production: 7.0 h" in chart
+
+
+def test_the_table_has_the_wait_to_production_for_every_week():
+    table = every_week_table([WAITED])
+
+    assert "<th scope=col>Median to production</th><th scope=col>Slowest tenth to production</th>" in table
+    assert "<td>60 min</td><td>7.0 h</td>" in table
+
+
+def test_the_legend_names_all_four_lines():
+    section = weeks_section([ONE, WAITED])
+
+    assert "to-production-slowest-tenth'></span>Slowest tenth to production" in section

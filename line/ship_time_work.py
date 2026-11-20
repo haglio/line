@@ -15,10 +15,19 @@ WHERE_THE_TIME_GOES = (
     "go-ahead lines only, never the contents of his media or prompts.")
 WHAT_GOT_THROUGH = ("Find which shipped changes let them through and which check would have caught them before "
                     "shipping, and add that check.")
+WHERE_PRODUCTION_WAITED = (
+    "Find where that week's Fun Time changes waited between shipping to Fun Time's main and production Fun Time "
+    "taking them. Production takes a version only once the main verifier (tests/integration/main_verifier.py in "
+    "Fun Time) passes it, so read state/main_verifier.log in Fun Time's production checkout and that checkout's "
+    "reflog for when each version was taken, and find what held the verifier up.")
 WHAT_TO_FIND = {"median_minutes": WHERE_THE_TIME_GOES, "slowest_tenth_minutes": WHERE_THE_TIME_GOES,
-                "bug_reports": WHAT_GOT_THROUGH, "crashes": WHAT_GOT_THROUGH}
+                "bug_reports": WHAT_GOT_THROUGH, "crashes": WHAT_GOT_THROUGH,
+                "to_production_median_minutes": WHERE_PRODUCTION_WAITED,
+                "to_production_slowest_tenth_minutes": WHERE_PRODUCTION_WAITED}
 NUMBER_WORDS = {"median_minutes": "median ship time, in minutes", "slowest_tenth_minutes": "slowest tenth, in minutes",
-                "bug_reports": "bugs he reported", "crashes": "app crashes"}
+                "bug_reports": "bugs he reported", "crashes": "app crashes",
+                "to_production_median_minutes": "median wait from shipping to production Fun Time, in minutes",
+                "to_production_slowest_tenth_minutes": "slowest tenth of the waits for production Fun Time, in minutes"}
 
 
 def asked_for(url: str) -> tuple[str, str] | None:

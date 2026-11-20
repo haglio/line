@@ -5,7 +5,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from shared_ui.palette import BLUE, RED, YELLOW, as_hex
+from shared_ui.palette import BLUE, GREEN, MAGENTA, RED, YELLOW, as_hex
 from shared_ui.spacing import BUTTON_RADIUS, GAP_DIALOG, GAP_MEDIUM
 from shared_ui.type_scale import SIZE_SMALL, in_pixels
 
@@ -25,12 +25,16 @@ MEDIAN_WORD = "Median"
 SLOWEST_WORD = "Slowest tenth"
 BUGS_WORD = "Bugs you reported"
 CRASHES_WORD = "App crashes"
-TABLE_COLUMNS = ("Week of", "Shipped", MEDIAN_WORD, SLOWEST_WORD, "Bugs", "Crashes")
+TO_PRODUCTION_MEDIAN_WORD = "Median to production"
+TO_PRODUCTION_SLOWEST_WORD = "Slowest tenth to production"
+TAKEN_WORD = "Taken by production"
+TABLE_COLUMNS = ("Week of", "Shipped", MEDIAN_WORD, SLOWEST_WORD, TO_PRODUCTION_MEDIAN_WORD, TO_PRODUCTION_SLOWEST_WORD,
+                 "Bugs", "Crashes")
 
 CHART_W = 1140
 CHART_H = 260
 LEFT = 52
-RIGHT = 150
+RIGHT = 230
 TOP = 14
 BOTTOM = 30
 GRID_LINES = 4
@@ -41,7 +45,9 @@ BAR_W_LARGEST = 18
 BAR_SHARE_OF_A_WEEK = 3
 BAR_RX = 3
 NICE_STEPS = (1, 2, 2.5, 5, 10)
-LINES = (("slowest_tenth_minutes", "slowest-tenth", SLOWEST_WORD), ("median_minutes", "median", MEDIAN_WORD))
+LINES = (("median_minutes", "median", MEDIAN_WORD), ("slowest_tenth_minutes", "slowest-tenth", SLOWEST_WORD),
+         ("to_production_median_minutes", "to-production-median", TO_PRODUCTION_MEDIAN_WORD),
+         ("to_production_slowest_tenth_minutes", "to-production-slowest-tenth", TO_PRODUCTION_SLOWEST_WORD))
 BARS = (("bug_reports", "bugs", -1), ("crashes", "crashes", 1))
 
 
@@ -116,11 +122,16 @@ def ship_time_chart(rows: list[dict]) -> str:
     highest = max([row[key] for row in rows for key, _css, _word in LINES if row.get(key) is not None], default=0)
     frame = Frame(len(rows), nice_top(highest))
     parts = _axes(frame, rows, _hours_or_minutes)
-    for key, css, word in LINES:
+    for key, css, word in reversed(LINES):
         parts.extend(_line(frame, rows, key, css, word))
     parts.extend(_hit(frame, index, row, [f"Shipped: {row.get('deliveries', 0)}",
                                           f"{MEDIAN_WORD}: {minutes_words(row.get('median_minutes'))}",
-                                          f"{SLOWEST_WORD}: {minutes_words(row.get('slowest_tenth_minutes'))}"])
+                                          f"{SLOWEST_WORD}: {minutes_words(row.get('slowest_tenth_minutes'))}",
+                                          f"{TAKEN_WORD}: {row.get('taken_by_production', 0)}",
+                                          f"{TO_PRODUCTION_MEDIAN_WORD}: "
+                                          f"{minutes_words(row.get('to_production_median_minutes'))}",
+                                          f"{TO_PRODUCTION_SLOWEST_WORD}: "
+                                          f"{minutes_words(row.get('to_production_slowest_tenth_minutes'))}"])
                  for index, row in enumerate(rows))
     return _svg(SHIP_TIME_HEADING, parts)
 
@@ -147,7 +158,9 @@ def every_week_table(rows: list[dict]) -> str:
     body = "".join(
         "<tr>" + "".join(f"<td>{value}</td>" for value in (
             week_words(row["week"]), row.get("deliveries", 0), minutes_words(row.get("median_minutes")),
-            minutes_words(row.get("slowest_tenth_minutes")), row.get("bug_reports", 0), row.get("crashes", 0))) + "</tr>"
+            minutes_words(row.get("slowest_tenth_minutes")), minutes_words(row.get("to_production_median_minutes")),
+            minutes_words(row.get("to_production_slowest_tenth_minutes")), row.get("bug_reports", 0),
+            row.get("crashes", 0))) + "</tr>"
         for row in reversed(rows))
     return f"<table class=every-week><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
 
@@ -159,7 +172,7 @@ def _key(css: str, word: str) -> str:
 def weeks_section(rows: list[dict]) -> str:
     if not rows:
         return ""
-    ship_keys = _key("median", MEDIAN_WORD) + _key("slowest-tenth", SLOWEST_WORD)
+    ship_keys = "".join(_key(css, word) for _row_key, css, word in LINES)
     through_keys = _key("bugs", BUGS_WORD) + _key("crashes", CRASHES_WORD)
     return (f"<section class=weeks><div class=week-head><h2>{SHIP_TIME_HEADING}</h2><div class=legend>{ship_keys}</div>"
             f"</div>{ship_time_chart(rows)}"
@@ -169,7 +182,7 @@ def weeks_section(rows: list[dict]) -> str:
 
 WEEKS_STYLE = f"""
 .weeks {{ margin-top:{GAP_DIALOG}px; --median:{as_hex(BLUE)}; --slowest:{as_hex(YELLOW)}; --bugs:{as_hex(YELLOW)};
-  --crashes:{as_hex(RED)} }}
+  --crashes:{as_hex(RED)}; --to-production-median:{as_hex(GREEN)}; --to-production-slowest:{as_hex(MAGENTA)} }}
 .weeks h2 {{ font-size:inherit; margin:{GAP_DIALOG}px 0 {GAP_MEDIUM}px }}
 .week-head {{ display:flex; flex-wrap:wrap; justify-content:space-between; align-items:baseline; gap:{GAP_DIALOG}px }}
 .week-chart {{ display:block; width:100%; height:auto; min-width:760px }}
@@ -179,6 +192,10 @@ WEEKS_STYLE = f"""
 .week-hit {{ fill:transparent }} .week-hit:hover {{ fill:var(--border) }}
 .week-chart .median, .week-key-color.median {{ fill:var(--median); background:var(--median) }}
 .week-chart .slowest-tenth, .week-key-color.slowest-tenth {{ fill:var(--slowest); background:var(--slowest) }}
+.week-chart .to-production-median, .week-key-color.to-production-median {{ fill:var(--to-production-median);
+  background:var(--to-production-median) }}
+.week-chart .to-production-slowest-tenth, .week-key-color.to-production-slowest-tenth {{
+  fill:var(--to-production-slowest); background:var(--to-production-slowest) }}
 rect.bugs, .week-key-color.bugs {{ fill:var(--bugs); background:var(--bugs) }}
 rect.crashes, .week-key-color.crashes {{ fill:var(--crashes); background:var(--crashes) }}
 .week-key-color {{ display:inline-block; width:12px; height:12px; border-radius:{BUTTON_RADIUS}px }}
