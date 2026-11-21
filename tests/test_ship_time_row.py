@@ -1,8 +1,10 @@
 import json
+import re
 from datetime import UTC, datetime
 
-from line.page_words import NO_VALUE
+from line.page_words import NO_VALUE, escaped
 from line.ship_time import ShipTimeRecord
+from line.ship_time_charts import MEDIAN_WORD, TO_PRODUCTION_MEDIAN_WORD
 from line.ship_time_row import (
     MEASURING_WORDS,
     TAKEN_BACK_HEADING,
@@ -110,6 +112,15 @@ def test_the_wait_to_production_has_its_median_and_slowest_tenth_compared_with_t
     shown = row({**WEEK_BEFORE, "to_production_median_minutes": 60, "to_production_slowest_tenth_minutes": 900},
                 {**LAST_WEEK, "to_production_median_minutes": 420, "to_production_slowest_tenth_minutes": 600})
 
-    assert "Median to production</div><div class=number-value>7.0 h" in shown
-    assert "Slowest tenth to production</div><div class=number-value>10.0 h" in shown
+    assert f"{escaped(TO_PRODUCTION_MEDIAN_WORD)}</div><div class=number-value>7.0 h" in shown
+    assert "Slowest tenth</div><div class=number-value>10.0 h" in shown
     assert "href='https://line-work.invalid/to_production_median_minutes/2026-W44'" in shown
+
+
+def test_each_median_shares_a_box_with_its_slowest_tenth_and_the_two_time_boxes_come_first():
+    shown = row({**WEEK_BEFORE, "to_production_median_minutes": 60}, {**LAST_WEEK, "to_production_median_minutes": 420})
+
+    boxes = shown.split("<div class=number-box>")[1:]
+    names = [re.findall(r"<div class=number-name>(.*?)</div>", box) for box in boxes]
+    assert names == [[escaped(MEDIAN_WORD), "Slowest tenth"], [escaped(TO_PRODUCTION_MEDIAN_WORD), "Slowest tenth"],
+                     ["Bugs you reported"], ["App crashes"]]

@@ -17,7 +17,7 @@ from shared_ui.type_scale import SIZE_BODY, SIZE_HEADING, SIZE_SMALL, in_pixels
 
 from line.page_words import NO_VALUE, day_words, escaped, minutes_words, monday_of, tip
 from line.ship_time import RECORD_NAME, ShipTimeRecord, read_the_record
-from line.ship_time_charts import WEEKS_STYLE, weeks_section
+from line.ship_time_charts import MEDIAN_WORD, TO_PRODUCTION_MEDIAN_WORD, WEEKS_STYLE, weeks_section
 from line.ship_time_work import ASKED_AT
 
 MEDIAN = "median_minutes"
@@ -26,9 +26,9 @@ BUGS = "bug_reports"
 CRASHES = "crashes"
 TO_PRODUCTION_MEDIAN = "to_production_median_minutes"
 TO_PRODUCTION_SLOWEST_TENTH = "to_production_slowest_tenth_minutes"
-NUMBER_NAMES = {MEDIAN: "Median ship time", SLOWEST_TENTH: "Slowest tenth", BUGS: "Bugs you reported",
-                CRASHES: "App crashes", TO_PRODUCTION_MEDIAN: "Median to production",
-                TO_PRODUCTION_SLOWEST_TENTH: "Slowest tenth to production"}
+NUMBER_NAMES = {MEDIAN: MEDIAN_WORD, SLOWEST_TENTH: "Slowest tenth", TO_PRODUCTION_MEDIAN: TO_PRODUCTION_MEDIAN_WORD,
+                TO_PRODUCTION_SLOWEST_TENTH: "Slowest tenth", BUGS: "Bugs you reported", CRASHES: "App crashes"}
+BOXES = ((MEDIAN, SLOWEST_TENTH), (TO_PRODUCTION_MEDIAN, TO_PRODUCTION_SLOWEST_TENTH), (BUGS,), (CRASHES,))
 TIMES = (MEDIAN, SLOWEST_TENTH, TO_PRODUCTION_MEDIAN, TO_PRODUCTION_SLOWEST_TENTH)
 MEASURING_WORDS = "Ship Time: measuring the weeks, which takes a minute or two the first time."
 TAKEN_BACK_HEADING = "Taken back by the main verifier and not shipped again"
@@ -76,8 +76,8 @@ def last_finished_weeks(weeks: list[dict], now: datetime) -> tuple[dict | None, 
     return (finished[-1] if finished else None, finished[-2] if len(finished) > 1 else None)
 
 
-def numbers_of(last: dict, before: dict | None) -> list[NumberThisWeek]:
-    return [NumberThisWeek(key, last.get(key), before.get(key) if before else None) for key in NUMBER_NAMES]
+def numbers_of(last: dict, before: dict | None, keys=NUMBER_NAMES) -> list[NumberThisWeek]:
+    return [NumberThisWeek(key, last.get(key), before.get(key) if before else None) for key in keys]
 
 
 def _change(number: NumberThisWeek) -> str:
@@ -99,8 +99,9 @@ def _work_on_this(number: NumberThisWeek, week: str) -> str:
 
 
 def _number(number: NumberThisWeek, week: str) -> str:
+    name = escaped(NUMBER_NAMES[number.key])
     return (f"<div class=number data-tip='{tip(NUMBER_NAMES[number.key], [COUNTED_HOW[number.key]])}'>"
-            f"<div class=number-name>{NUMBER_NAMES[number.key]}</div>"
+            f"<div class=number-name>{name}</div>"
             f"<div class=number-value>{_shown(number.key, number.value)}</div>{_change(number)}"
             f"{_work_on_this(number, week)}</div>")
 
@@ -120,7 +121,9 @@ def ship_time_row(record: ShipTimeRecord | None, now: datetime) -> str:
     if last is None:
         return ("<section class=ship-time><div class=ship-time-heading>Ship Time: no finished week yet</div></section>"
                 f"{_taken_back(record.taken_back)}")
-    numbers = "".join(_number(number, last["week"]) for number in numbers_of(last, before))
+    numbers = "".join("<div class=number-box>" + "".join(_number(number, last["week"])
+                                                          for number in numbers_of(last, before, box)) + "</div>"
+                      for box in BOXES)
     return (f"<section class=ship-time><div class=ship-time-heading>Ship Time, week of {day_words(monday_of(last['week']))}"
             f"</div><div class=numbers>{numbers}</div></section>{_taken_back(record.taken_back)}")
 
@@ -152,9 +155,13 @@ SHIP_TIME_STYLE = f"""
 .ship-time {{ margin:0 0 {GAP_DIALOG}px }}
 .ship-time-heading, .taken-back-heading {{ color:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px;
   margin:0 0 {GAP_SMALL}px }}
-.numbers {{ display:grid; grid-template-columns:repeat({len(NUMBER_NAMES)}, minmax(0, 1fr)); gap:{GAP_MEDIUM}px }}
-.number {{ border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px;
+.numbers {{ display:grid; grid-template-columns:{" ".join(f"minmax(0, {len(box)}fr)" for box in BOXES)};
+  grid-template-rows:repeat(4, auto); gap:0 {GAP_MEDIUM}px }}
+.number-box {{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); grid-row:span 4;
+  grid-template-rows:subgrid; column-gap:{GAP_MEDIUM}px; border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px;
   padding:{BUTTON_PAD_V}px {BUTTON_PAD_H_TIGHT}px }}
+.number {{ display:grid; grid-row:span 4; grid-template-rows:subgrid; align-items:end; justify-items:start }}
+.number-change, .work-on-this {{ align-self:start }}
 .number-name, .number-change {{ color:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px }}
 .number-value {{ font-size:{in_pixels(SIZE_HEADING)}px; font-weight:bold }}
 .worse {{ color:var(--failed); font-weight:bold }} .better {{ color:var(--passed); font-weight:bold }}

@@ -164,7 +164,7 @@
       "his_word": "Ship Time",
       "code_word": "ship time",
       "id": "ship_time",
-      "thing": "the row across the top of the window with last week's six numbers",
+      "thing": "the row across the top of the window with last week's numbers in four boxes",
       "code_today": [
         "ship_time"
       ],
@@ -172,17 +172,16 @@
     },
     {
       "screen": [
-        "Median ship time",
+        "Median time from \"ship it\" to shipped",
         "Slowest tenth",
+        "Median time from shipped to production Fun Time",
         "Bugs you reported",
-        "App crashes",
-        "Median to production",
-        "Slowest tenth to production"
+        "App crashes"
       ],
       "his_word": null,
       "code_word": "number",
       "id": "ship_time_number",
-      "thing": "one of the six boxes in the Ship Time row, its name above its value and how it compares with the week before",
+      "thing": "one of the numbers in the four boxes of the Ship Time row, each median sharing its box with its slowest tenth, its name above its value and how it compares with the week before",
       "code_today": [
         "number"
       ],
@@ -221,7 +220,7 @@
       "his_word": null,
       "code_word": "ship time chart",
       "id": "ship_time_chart",
-      "thing": "the chart below the chart of runs with a line each for Median, Slowest tenth, Median to production and Slowest tenth to production, week by week",
+      "thing": "the chart below the chart of runs with a line each for the median and slowest tenth from \"ship it\" to shipped and from shipped to production Fun Time, week by week",
       "code_today": [
         "ship_time_chart"
       ],
