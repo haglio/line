@@ -20,7 +20,7 @@ def waits(merged: dict[str, datetime], main: list[str],
     furthest = list(itertools.accumulate((index for _when, index in taken), max))
     found = []
     for commit, merged_at in merged.items():
-        if commit not in place:
+        if commit not in place or not taken or merged_at < taken[0][0]:
             continue
         first = bisect.bisect_left(furthest, place[commit])
         if first < len(taken):
