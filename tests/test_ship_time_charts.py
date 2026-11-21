@@ -1,3 +1,6 @@
+import itertools
+import re
+
 from line import ship_time_charts
 from line.page_words import minutes_words
 from line.ship_time_charts import (
@@ -114,3 +117,10 @@ def test_the_legend_names_all_four_lines():
     section = weeks_section([ONE, WAITED])
 
     assert "to-production-slowest-tenth'></span>Slowest tenth to production" in section
+
+
+def test_the_names_at_the_ends_of_lines_that_end_close_together_are_spread_apart():
+    chart = ship_time_chart([{**ONE, "median_minutes": 96, "to_production_median_minutes": 110}])
+
+    heights = sorted(float(y) for y in re.findall(r"<text class=line-end x=[\d.]+ y=([\d.]+)>", chart))
+    assert all(lower - upper >= ship_time_charts.END_WORDS_APART for upper, lower in itertools.pairwise(heights))

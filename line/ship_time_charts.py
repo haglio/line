@@ -44,6 +44,7 @@ LINE_H = 2
 BAR_W_LARGEST = 18
 BAR_SHARE_OF_A_WEEK = 3
 BAR_RX = 3
+END_WORDS_APART = 14
 NICE_STEPS = (1, 2, 2.5, 5, 10)
 LINES = (("median_minutes", "median", MEDIAN_WORD), ("slowest_tenth_minutes", "slowest-tenth", SLOWEST_WORD),
          ("to_production_median_minutes", "to-production-median", TO_PRODUCTION_MEDIAN_WORD),
@@ -100,18 +101,24 @@ def _hit(frame: Frame, index: int, row: dict, lines: list[str]) -> str:
             f"height={CHART_H - TOP - BOTTOM} data-tip='{tip(f'Week of {week_words(row['week'])}', lines)}'></rect>")
 
 
-def _line(frame: Frame, rows: list[dict], key: str, css: str, word: str) -> list[str]:
-    points = [(frame.x(index), frame.y(row[key]), row[key]) for index, row in enumerate(rows)
-              if row.get(key) is not None]
-    if not points:
-        return []
+def _points(frame: Frame, rows: list[dict], key: str) -> list[tuple[float, float, float]]:
+    return [(frame.x(index), frame.y(row[key]), row[key]) for index, row in enumerate(rows) if row.get(key) is not None]
+
+
+def _line(points: list[tuple[float, float, float]], css: str) -> str:
     path = " ".join(f"M{x1:.1f},{y1 - LINE_H / 2:.1f} L{x2:.1f},{y2 - LINE_H / 2:.1f} "
                     f"L{x2:.1f},{y2 + LINE_H / 2:.1f} L{x1:.1f},{y1 + LINE_H / 2:.1f} Z"
                     for (x1, y1, _first), (x2, y2, _second) in itertools.pairwise(points))
     dots = "".join(f"<circle class={css} cx={x:.1f} cy={y:.1f} r={POINT_R}></circle>" for x, y, _value in points)
-    x, y, value = points[-1]
-    end_word = f"<text class=line-end x={x + 10:.1f} y={y + 4:.1f}>{word} {minutes_words(value)}</text>"
-    return [f"<path class={css} d='{path}'></path>{dots}{end_word}"]
+    return f"<path class={css} d='{path}'></path>{dots}"
+
+
+def _end_words(ends: list[tuple[float, float, str]]) -> list[str]:
+    placed, lowest = [], -math.inf
+    for x, y, words in sorted(ends, key=lambda end: end[1]):
+        lowest = max(y, lowest + END_WORDS_APART)
+        placed.append(f"<text class=line-end x={x + 10:.1f} y={lowest + 4:.1f}>{words}</text>")
+    return placed
 
 
 def _hours_or_minutes(minutes: float) -> str:
@@ -122,8 +129,13 @@ def ship_time_chart(rows: list[dict]) -> str:
     highest = max([row[key] for row in rows for key, _css, _word in LINES if row.get(key) is not None], default=0)
     frame = Frame(len(rows), nice_top(highest))
     parts = _axes(frame, rows, _hours_or_minutes)
+    ends = []
     for key, css, word in reversed(LINES):
-        parts.extend(_line(frame, rows, key, css, word))
+        if points := _points(frame, rows, key):
+            parts.append(_line(points, css))
+            x, y, value = points[-1]
+            ends.append((x, y, f"{word} {minutes_words(value)}"))
+    parts.extend(_end_words(ends))
     parts.extend(_hit(frame, index, row, [f"Shipped: {row.get('deliveries', 0)}",
                                           f"{MEDIAN_WORD}: {minutes_words(row.get('median_minutes'))}",
                                           f"{SLOWEST_WORD}: {minutes_words(row.get('slowest_tenth_minutes'))}",
