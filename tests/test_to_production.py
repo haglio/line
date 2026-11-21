@@ -64,3 +64,7 @@ def test_the_waits_are_read_from_github_main_s_history_and_production_s_own_reco
 def test_github_not_answering_is_said_so():
     with pytest.raises(GitHubDidNotAnswer):
         to_production.measure(Path("made-up"), since=T0, run=FakeFunTime(github_up=False))
+
+
+def test_a_change_shipped_before_production_s_record_begins_is_passed_over():
+    assert to_production.waits({"a": T0 - hours(30)}, MAIN, [(T0, "b")]) == []

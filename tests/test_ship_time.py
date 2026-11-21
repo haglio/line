@@ -196,7 +196,8 @@ def test_measure_counts_a_week_from_the_transcripts_github_and_the_crash_log(tmp
                           crash_record("2026-10-05T19:42:03.1670000Z", "Application Error", "pythonw.exe"),
                           fun_time_merged=json.dumps([{"mergedAt": (T0 + minutes(30)).isoformat(),
                                                        "mergeCommit": {"oid": "c7"}}]),
-                          main="c6\nc7\n", production=f"c7\tHEAD@{{{(T0 + minutes(150)).isoformat()}}}\n")
+                          main="c6\nc7\n", production=f"c7\tHEAD@{{{(T0 + minutes(150)).isoformat()}}}\n"
+                                     f"c6\tHEAD@{{{T0.isoformat()}}}\n")
 
     rows = ship_time.measure(1, projects=tmp_path, fun_time=Path("made-up"), run=machine, now=T0 + timedelta(days=1))
 
