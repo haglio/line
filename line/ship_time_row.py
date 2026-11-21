@@ -135,7 +135,8 @@ def ship_time_row(record: ShipTimeRecord | None, now: datetime) -> str:
     if last is None:
         return ("<section class=ship-time><div class=ship-time-heading>Ship Time: no finished week yet</div></section>"
                 f"{_taken_back(record.taken_back)}")
-    numbers = "".join(f"<div class=number-box><div class=box-name>{name}</div>"
+    numbers = "".join(f"<div class=number-box style='grid-template-columns:repeat({len(keys)}, minmax(0, 1fr))'>"
+                      f"<div class=box-name>{name}</div>"
                       + "".join(_number(number, last["week"]) for number in numbers_of(last, before, keys)) + "</div>"
                       for name, keys in BOXES)
     return (f"<section class=ship-time><div class=ship-time-heading>Ship Time, week of {day_words(monday_of(last['week']))}"
@@ -171,7 +172,7 @@ SHIP_TIME_STYLE = f"""
   margin:0 0 {GAP_SMALL}px }}
 .numbers {{ display:grid; grid-template-columns:{" ".join(f"minmax(0, {len(keys)}fr)" for _name, keys in BOXES)};
   grid-template-rows:repeat({ROWS_IN_A_BOX}, auto); gap:0 {GAP_MEDIUM}px }}
-.number-box {{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); grid-row:span {ROWS_IN_A_BOX};
+.number-box {{ display:grid; grid-row:span {ROWS_IN_A_BOX};
   grid-template-rows:subgrid; column-gap:{GAP_MEDIUM}px; border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px;
   padding:{BUTTON_PAD_V}px {BUTTON_PAD_H_TIGHT}px }}
 .box-name {{ grid-row:1; grid-column:1 / -1; font-weight:bold; font-size:{in_pixels(SIZE_SMALL)}px }}

@@ -122,8 +122,15 @@ def test_the_wait_to_production_has_its_median_and_slowest_tenth_compared_with_t
 def test_each_median_shares_a_box_with_its_slowest_tenth_and_the_two_time_boxes_come_first():
     shown = row({**WEEK_BEFORE, "to_production_median_minutes": 60}, {**LAST_WEEK, "to_production_median_minutes": 420})
 
-    boxes = shown.split("<div class=number-box>")[1:]
+    boxes = re.split(r"<div class=number-box[ >]", shown)[1:]
     names = [re.findall(r"<div class=(?:box|number)-name>(.*?)</div>", box) for box in boxes]
     assert names == [["Time from acceptance to merged", "Median time", "Slowest tenth"],
                      ["Time from merged to production", "Median time", "Slowest tenth"],
                      ["Bugs you reported", ""], ["App crashes", ""]]
+
+
+def test_a_box_s_name_runs_across_the_whole_box_not_only_its_first_number():
+    shown = row({**WEEK_BEFORE, "to_production_median_minutes": 60}, {**LAST_WEEK, "to_production_median_minutes": 420})
+
+    assert shown.count("<div class=number-box style='grid-template-columns:repeat(2, minmax(0, 1fr))'>") == 2
+    assert shown.count("<div class=number-box style='grid-template-columns:repeat(1, minmax(0, 1fr))'>") == 2
