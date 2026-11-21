@@ -44,7 +44,7 @@ def test_a_higher_value_is_drawn_higher_up_and_a_later_week_further_right():
 def test_each_week_of_the_ship_time_chart_says_its_numbers_when_pointed_at():
     chart = ship_time_chart([ONE, TWO])
 
-    assert escaped(f"Week of Oct 26|Shipped: 8|{MEDIAN_WORD}: 2.4 h|{SLOWEST_WORD}: 14.9 h") in chart
+    assert escaped(f"Week of Oct 26|Shipped: 8|{MEDIAN_WORD}: 144 min|{SLOWEST_WORD}: 894 min") in chart
 
 
 def test_a_week_nothing_shipped_leaves_a_gap_in_the_lines_and_says_so():
@@ -55,7 +55,7 @@ def test_a_week_nothing_shipped_leaves_a_gap_in_the_lines_and_says_so():
 
 
 def test_the_line_s_last_point_carries_its_name_and_value():
-    assert f"{escaped(MEDIAN_WORD)} 2.4 h" in ship_time_chart([ONE, TWO])
+    assert f"{escaped(MEDIAN_WORD)} 144 min" in ship_time_chart([ONE, TWO])
 
 
 def test_what_got_through_draws_a_bar_only_for_a_count_above_zero():
@@ -90,9 +90,9 @@ def test_with_no_weeks_the_section_is_not_drawn():
     assert weeks_section([]) == ""
 
 
-def test_the_ship_time_axis_reads_in_hours_when_the_numbers_are_large_and_in_minutes_when_small():
-    assert ">4 h</text>" in ship_time_chart([{**TWO, "slowest_tenth_minutes": 900}])
-    assert ">25m</text>" in ship_time_chart([{**ONE, "slowest_tenth_minutes": 100, "median_minutes": 10}])
+def test_the_ship_time_axis_reads_in_minutes_however_large():
+    assert ">250 min</text>" in ship_time_chart([{**TWO, "slowest_tenth_minutes": 900}])
+    assert ">25 min</text>" in ship_time_chart([{**ONE, "slowest_tenth_minutes": 100, "median_minutes": 10}])
 
 
 def test_weeks_with_nothing_shipped_draw_no_line():
@@ -106,15 +106,15 @@ def test_the_ship_time_chart_draws_the_wait_to_production_beside_the_ship_time()
     chart = ship_time_chart([ONE, WAITED])
 
     assert "<circle class=to-production-median" in chart
-    assert f"{TO_PRODUCTION_SLOWEST_WORD} 7.0 h" in chart
-    assert f"Taken by production: 30|{TO_PRODUCTION_MEDIAN_WORD}: 60 min|{TO_PRODUCTION_SLOWEST_WORD}: 7.0 h" in chart
+    assert f"{TO_PRODUCTION_SLOWEST_WORD} 420 min" in chart
+    assert f"Taken by production: 30|{TO_PRODUCTION_MEDIAN_WORD}: 60 min|{TO_PRODUCTION_SLOWEST_WORD}: 420 min" in chart
 
 
 def test_the_table_has_the_wait_to_production_for_every_week():
     table = every_week_table([WAITED])
 
     assert f"<th scope=col>{TO_PRODUCTION_MEDIAN_WORD}</th><th scope=col>{TO_PRODUCTION_SLOWEST_WORD}</th>" in table
-    assert "<td>60 min</td><td>7.0 h</td>" in table
+    assert "<td>60 min</td><td>420 min</td>" in table
 
 
 def test_the_legend_names_all_four_lines():

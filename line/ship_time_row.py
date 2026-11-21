@@ -17,7 +17,14 @@ from shared_ui.type_scale import SIZE_BODY, SIZE_HEADING, SIZE_SMALL, in_pixels
 
 from line.page_words import NO_VALUE, day_words, escaped, minutes_words, monday_of, tip
 from line.ship_time import RECORD_NAME, ShipTimeRecord, read_the_record
-from line.ship_time_charts import MEDIAN_WORD, TO_PRODUCTION_MEDIAN_WORD, WEEKS_STYLE, weeks_section
+from line.ship_time_charts import (
+    MEDIAN_WORD,
+    SLOWEST_WORD,
+    TO_PRODUCTION_MEDIAN_WORD,
+    TO_PRODUCTION_SLOWEST_WORD,
+    WEEKS_STYLE,
+    weeks_section,
+)
 from line.ship_time_work import ASKED_AT
 
 MEDIAN = "median_minutes"
@@ -26,9 +33,15 @@ BUGS = "bug_reports"
 CRASHES = "crashes"
 TO_PRODUCTION_MEDIAN = "to_production_median_minutes"
 TO_PRODUCTION_SLOWEST_TENTH = "to_production_slowest_tenth_minutes"
-NUMBER_NAMES = {MEDIAN: MEDIAN_WORD, SLOWEST_TENTH: "Slowest tenth", TO_PRODUCTION_MEDIAN: TO_PRODUCTION_MEDIAN_WORD,
-                TO_PRODUCTION_SLOWEST_TENTH: "Slowest tenth", BUGS: "Bugs you reported", CRASHES: "App crashes"}
-BOXES = ((MEDIAN, SLOWEST_TENTH), (TO_PRODUCTION_MEDIAN, TO_PRODUCTION_SLOWEST_TENTH), (BUGS,), (CRASHES,))
+NUMBER_NAMES = {MEDIAN: MEDIAN_WORD, SLOWEST_TENTH: SLOWEST_WORD, TO_PRODUCTION_MEDIAN: TO_PRODUCTION_MEDIAN_WORD,
+                TO_PRODUCTION_SLOWEST_TENTH: TO_PRODUCTION_SLOWEST_WORD, BUGS: "Bugs you reported",
+                CRASHES: "App crashes"}
+NAMES_IN_A_BOX = {MEDIAN: "Median time", SLOWEST_TENTH: "Slowest tenth", TO_PRODUCTION_MEDIAN: "Median time",
+                  TO_PRODUCTION_SLOWEST_TENTH: "Slowest tenth", BUGS: "", CRASHES: ""}
+BOXES = (("Time from acceptance to merged", (MEDIAN, SLOWEST_TENTH)),
+         ("Time from merged to production", (TO_PRODUCTION_MEDIAN, TO_PRODUCTION_SLOWEST_TENTH)),
+         (NUMBER_NAMES[BUGS], (BUGS,)), (NUMBER_NAMES[CRASHES], (CRASHES,)))
+ROWS_IN_A_BOX = 6
 TIMES = (MEDIAN, SLOWEST_TENTH, TO_PRODUCTION_MEDIAN, TO_PRODUCTION_SLOWEST_TENTH)
 MEASURING_WORDS = "Ship Time: measuring the weeks, which takes a minute or two the first time."
 TAKEN_BACK_HEADING = "Taken back by the main verifier and not shipped again"
@@ -85,9 +98,11 @@ def _change(number: NumberThisWeek) -> str:
         return "<div class=number-change>No earlier week to compare</div>"
     before = _shown(number.key, number.before)
     if number.got_worse:
-        return f"<div class=number-change><span class=worse>worse</span> than the week before ({before})</div>"
+        return (f"<div class=number-change><span class=worse>worse</span> than the week before</div>"
+                f"<div class=number-before>({before})</div>")
     if number.got_better:
-        return f"<div class=number-change><span class=better>better</span> than the week before ({before})</div>"
+        return (f"<div class=number-change><span class=better>better</span> than the week before</div>"
+                f"<div class=number-before>({before})</div>")
     return "<div class=number-change>Same as the week before</div>"
 
 
@@ -99,9 +114,8 @@ def _work_on_this(number: NumberThisWeek, week: str) -> str:
 
 
 def _number(number: NumberThisWeek, week: str) -> str:
-    name = escaped(NUMBER_NAMES[number.key])
     return (f"<div class=number data-tip='{tip(NUMBER_NAMES[number.key], [COUNTED_HOW[number.key]])}'>"
-            f"<div class=number-name>{name}</div>"
+            f"<div class=number-name>{NAMES_IN_A_BOX[number.key]}</div>"
             f"<div class=number-value>{_shown(number.key, number.value)}</div>{_change(number)}"
             f"{_work_on_this(number, week)}</div>")
 
@@ -121,9 +135,9 @@ def ship_time_row(record: ShipTimeRecord | None, now: datetime) -> str:
     if last is None:
         return ("<section class=ship-time><div class=ship-time-heading>Ship Time: no finished week yet</div></section>"
                 f"{_taken_back(record.taken_back)}")
-    numbers = "".join("<div class=number-box>" + "".join(_number(number, last["week"])
-                                                          for number in numbers_of(last, before, box)) + "</div>"
-                      for box in BOXES)
+    numbers = "".join(f"<div class=number-box><div class=box-name>{name}</div>"
+                      + "".join(_number(number, last["week"]) for number in numbers_of(last, before, keys)) + "</div>"
+                      for name, keys in BOXES)
     return (f"<section class=ship-time><div class=ship-time-heading>Ship Time, week of {day_words(monday_of(last['week']))}"
             f"</div><div class=numbers>{numbers}</div></section>{_taken_back(record.taken_back)}")
 
@@ -155,14 +169,16 @@ SHIP_TIME_STYLE = f"""
 .ship-time {{ margin:0 0 {GAP_DIALOG}px }}
 .ship-time-heading, .taken-back-heading {{ color:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px;
   margin:0 0 {GAP_SMALL}px }}
-.numbers {{ display:grid; grid-template-columns:{" ".join(f"minmax(0, {len(box)}fr)" for box in BOXES)};
-  grid-template-rows:repeat(4, auto); gap:0 {GAP_MEDIUM}px }}
-.number-box {{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); grid-row:span 4;
+.numbers {{ display:grid; grid-template-columns:{" ".join(f"minmax(0, {len(keys)}fr)" for _name, keys in BOXES)};
+  grid-template-rows:repeat({ROWS_IN_A_BOX}, auto); gap:0 {GAP_MEDIUM}px }}
+.number-box {{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0, 1fr); grid-row:span {ROWS_IN_A_BOX};
   grid-template-rows:subgrid; column-gap:{GAP_MEDIUM}px; border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px;
   padding:{BUTTON_PAD_V}px {BUTTON_PAD_H_TIGHT}px }}
-.number {{ display:grid; grid-row:span 4; grid-template-rows:subgrid; align-items:end; justify-items:start }}
-.number-change, .work-on-this {{ align-self:start }}
-.number-name, .number-change {{ color:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px }}
+.box-name {{ grid-row:1; grid-column:1 / -1; font-weight:bold; font-size:{in_pixels(SIZE_SMALL)}px }}
+.number {{ display:grid; grid-row:2 / span {ROWS_IN_A_BOX - 1}; grid-template-rows:subgrid; align-items:end;
+  justify-items:start }}
+.number-change, .number-before, .work-on-this {{ align-self:start }}
+.number-name, .number-change, .number-before {{ color:var(--ink2); font-size:{in_pixels(SIZE_SMALL)}px }}
 .number-value {{ font-size:{in_pixels(SIZE_HEADING)}px; font-weight:bold }}
 .worse {{ color:var(--failed); font-weight:bold }} .better {{ color:var(--passed); font-weight:bold }}
 .work-on-this {{ display:inline-block; margin-top:{GAP_SMALL}px; color:var(--ink); text-decoration:none;
