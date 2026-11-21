@@ -21,12 +21,12 @@ from line.page_words import (
 SHIP_TIME_HEADING = "Ship time, minutes"
 GOT_THROUGH_HEADING = "What got through"
 EVERY_WEEK_HEADING = "Every week"
-MEDIAN_WORD = "Median"
-SLOWEST_WORD = "Slowest tenth"
+MEDIAN_WORD = 'Median time from "ship it" to shipped'
+SLOWEST_WORD = 'Slowest tenth from "ship it" to shipped'
 BUGS_WORD = "Bugs you reported"
 CRASHES_WORD = "App crashes"
-TO_PRODUCTION_MEDIAN_WORD = "Median to production"
-TO_PRODUCTION_SLOWEST_WORD = "Slowest tenth to production"
+TO_PRODUCTION_MEDIAN_WORD = "Median time from shipped to production Fun Time"
+TO_PRODUCTION_SLOWEST_WORD = "Slowest tenth from shipped to production Fun Time"
 TAKEN_WORD = "Taken by production"
 TABLE_COLUMNS = ("Week of", "Shipped", MEDIAN_WORD, SLOWEST_WORD, TO_PRODUCTION_MEDIAN_WORD, TO_PRODUCTION_SLOWEST_WORD,
                  "Bugs", "Crashes")
@@ -34,7 +34,7 @@ TABLE_COLUMNS = ("Week of", "Shipped", MEDIAN_WORD, SLOWEST_WORD, TO_PRODUCTION_
 CHART_W = 1140
 CHART_H = 260
 LEFT = 52
-RIGHT = 230
+RIGHT = 370
 TOP = 14
 BOTTOM = 30
 GRID_LINES = 4
@@ -117,7 +117,7 @@ def _end_words(ends: list[tuple[float, float, str]]) -> list[str]:
     placed, lowest = [], -math.inf
     for x, y, words in sorted(ends, key=lambda end: end[1]):
         lowest = max(y, lowest + END_WORDS_APART)
-        placed.append(f"<text class=line-end x={x + 10:.1f} y={lowest + 4:.1f}>{words}</text>")
+        placed.append(f"<text class=line-end x={x + 10:.1f} y={lowest + 4:.1f}>{escaped(words)}</text>")
     return placed
 
 
@@ -166,7 +166,7 @@ def got_through_chart(rows: list[dict]) -> str:
 
 
 def every_week_table(rows: list[dict]) -> str:
-    head = "".join(f"<th scope=col>{column}</th>" for column in TABLE_COLUMNS)
+    head = "".join(f"<th scope=col>{escaped(column)}</th>" for column in TABLE_COLUMNS)
     body = "".join(
         "<tr>" + "".join(f"<td>{value}</td>" for value in (
             week_words(row["week"]), row.get("deliveries", 0), minutes_words(row.get("median_minutes")),
@@ -178,7 +178,7 @@ def every_week_table(rows: list[dict]) -> str:
 
 
 def _key(css: str, word: str) -> str:
-    return f"<span class=key><span class='week-key-color {css}'></span>{word}</span>"
+    return f"<span class=key><span class='week-key-color {css}'></span>{escaped(word)}</span>"
 
 
 def weeks_section(rows: list[dict]) -> str:

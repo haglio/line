@@ -2,11 +2,15 @@ import itertools
 import re
 
 from line import ship_time_charts
-from line.page_words import minutes_words
+from line.page_words import escaped, minutes_words
 from line.ship_time_charts import (
     EVERY_WEEK_HEADING,
     GOT_THROUGH_HEADING,
+    MEDIAN_WORD,
     SHIP_TIME_HEADING,
+    SLOWEST_WORD,
+    TO_PRODUCTION_MEDIAN_WORD,
+    TO_PRODUCTION_SLOWEST_WORD,
     Frame,
     every_week_table,
     got_through_chart,
@@ -40,18 +44,18 @@ def test_a_higher_value_is_drawn_higher_up_and_a_later_week_further_right():
 def test_each_week_of_the_ship_time_chart_says_its_numbers_when_pointed_at():
     chart = ship_time_chart([ONE, TWO])
 
-    assert "Week of Oct 26|Shipped: 8|Median: 2.4 h|Slowest tenth: 14.9 h" in chart
+    assert escaped(f"Week of Oct 26|Shipped: 8|{MEDIAN_WORD}: 2.4 h|{SLOWEST_WORD}: 14.9 h") in chart
 
 
 def test_a_week_nothing_shipped_leaves_a_gap_in_the_lines_and_says_so():
     chart = ship_time_chart([ONE, QUIET, TWO])
 
     assert chart.count("<circle class=median") == 2
-    assert "Median: \N{EN DASH}" in chart
+    assert escaped(f"{MEDIAN_WORD}: \N{EN DASH}") in chart
 
 
 def test_the_line_s_last_point_carries_its_name_and_value():
-    assert "Median 2.4 h" in ship_time_chart([ONE, TWO])
+    assert f"{escaped(MEDIAN_WORD)} 2.4 h" in ship_time_chart([ONE, TWO])
 
 
 def test_what_got_through_draws_a_bar_only_for_a_count_above_zero():
@@ -102,21 +106,21 @@ def test_the_ship_time_chart_draws_the_wait_to_production_beside_the_ship_time()
     chart = ship_time_chart([ONE, WAITED])
 
     assert "<circle class=to-production-median" in chart
-    assert "Slowest tenth to production 7.0 h" in chart
-    assert "Taken by production: 30|Median to production: 60 min|Slowest tenth to production: 7.0 h" in chart
+    assert f"{TO_PRODUCTION_SLOWEST_WORD} 7.0 h" in chart
+    assert f"Taken by production: 30|{TO_PRODUCTION_MEDIAN_WORD}: 60 min|{TO_PRODUCTION_SLOWEST_WORD}: 7.0 h" in chart
 
 
 def test_the_table_has_the_wait_to_production_for_every_week():
     table = every_week_table([WAITED])
 
-    assert "<th scope=col>Median to production</th><th scope=col>Slowest tenth to production</th>" in table
+    assert f"<th scope=col>{TO_PRODUCTION_MEDIAN_WORD}</th><th scope=col>{TO_PRODUCTION_SLOWEST_WORD}</th>" in table
     assert "<td>60 min</td><td>7.0 h</td>" in table
 
 
 def test_the_legend_names_all_four_lines():
     section = weeks_section([ONE, WAITED])
 
-    assert "to-production-slowest-tenth'></span>Slowest tenth to production" in section
+    assert f"to-production-slowest-tenth'></span>{TO_PRODUCTION_SLOWEST_WORD}" in section
 
 
 def test_the_names_at_the_ends_of_lines_that_end_close_together_are_spread_apart():
