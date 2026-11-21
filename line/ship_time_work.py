@@ -24,8 +24,8 @@ WHAT_TO_FIND = {"median_minutes": WHERE_THE_TIME_GOES, "slowest_tenth_minutes": 
                 "bug_reports": WHAT_GOT_THROUGH, "crashes": WHAT_GOT_THROUGH,
                 "to_production_median_minutes": WHERE_PRODUCTION_WAITED,
                 "to_production_slowest_tenth_minutes": WHERE_PRODUCTION_WAITED}
-NUMBER_WORDS = {"median_minutes": "median time from his \"ship it\" to shipped, in minutes",
-                "slowest_tenth_minutes": "slowest tenth from his \"ship it\" to shipped, in minutes",
+NUMBER_WORDS = {"median_minutes": "median time from his acceptance (\"ship it\") to merged, in minutes",
+                "slowest_tenth_minutes": "slowest tenth from his acceptance (\"ship it\") to merged, in minutes",
                 "bug_reports": "bugs he reported", "crashes": "app crashes",
                 "to_production_median_minutes": "median wait from shipping to production Fun Time, in minutes",
                 "to_production_slowest_tenth_minutes": "slowest tenth of the waits for production Fun Time, in minutes"}

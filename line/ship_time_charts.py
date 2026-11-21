@@ -10,7 +10,6 @@ from shared_ui.spacing import BUTTON_RADIUS, GAP_DIALOG, GAP_MEDIUM
 from shared_ui.type_scale import SIZE_SMALL, in_pixels
 
 from line.page_words import (
-    SHOWN_IN_HOURS_FROM_MINUTES,
     day_words,
     escaped,
     minutes_words,
@@ -21,12 +20,12 @@ from line.page_words import (
 SHIP_TIME_HEADING = "Ship time, minutes"
 GOT_THROUGH_HEADING = "What got through"
 EVERY_WEEK_HEADING = "Every week"
-MEDIAN_WORD = 'Median time from "ship it" to shipped'
-SLOWEST_WORD = 'Slowest tenth from "ship it" to shipped'
+MEDIAN_WORD = "Median time from acceptance to merged"
+SLOWEST_WORD = "Slowest tenth from acceptance to merged"
 BUGS_WORD = "Bugs you reported"
 CRASHES_WORD = "App crashes"
-TO_PRODUCTION_MEDIAN_WORD = "Median time from shipped to production Fun Time"
-TO_PRODUCTION_SLOWEST_WORD = "Slowest tenth from shipped to production Fun Time"
+TO_PRODUCTION_MEDIAN_WORD = "Median time from merged to production"
+TO_PRODUCTION_SLOWEST_WORD = "Slowest tenth from merged to production"
 TAKEN_WORD = "Taken by production"
 TABLE_COLUMNS = ("Week of", "Shipped", MEDIAN_WORD, SLOWEST_WORD, TO_PRODUCTION_MEDIAN_WORD, TO_PRODUCTION_SLOWEST_WORD,
                  "Bugs", "Crashes")
@@ -34,7 +33,7 @@ TABLE_COLUMNS = ("Week of", "Shipped", MEDIAN_WORD, SLOWEST_WORD, TO_PRODUCTION_
 CHART_W = 1140
 CHART_H = 260
 LEFT = 52
-RIGHT = 370
+RIGHT = 320
 TOP = 14
 BOTTOM = 30
 GRID_LINES = 4
@@ -121,14 +120,10 @@ def _end_words(ends: list[tuple[float, float, str]]) -> list[str]:
     return placed
 
 
-def _hours_or_minutes(minutes: float) -> str:
-    return f"{round(minutes / 60)} h" if minutes >= SHOWN_IN_HOURS_FROM_MINUTES else f"{round(minutes)}m"
-
-
 def ship_time_chart(rows: list[dict]) -> str:
     highest = max([row[key] for row in rows for key, _css, _word in LINES if row.get(key) is not None], default=0)
     frame = Frame(len(rows), nice_top(highest))
-    parts = _axes(frame, rows, _hours_or_minutes)
+    parts = _axes(frame, rows, minutes_words)
     ends = []
     for key, css, word in reversed(LINES):
         if points := _points(frame, rows, key):

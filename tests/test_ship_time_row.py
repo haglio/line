@@ -2,9 +2,8 @@ import json
 import re
 from datetime import UTC, datetime
 
-from line.page_words import NO_VALUE, escaped
+from line.page_words import NO_VALUE
 from line.ship_time import ShipTimeRecord
-from line.ship_time_charts import MEDIAN_WORD, TO_PRODUCTION_MEDIAN_WORD
 from line.ship_time_row import (
     MEASURING_WORDS,
     TAKEN_BACK_HEADING,
@@ -31,20 +30,23 @@ def test_the_row_shows_the_last_finished_week_never_the_one_still_going():
     shown = row(WEEK_BEFORE, LAST_WEEK, THIS_WEEK)
 
     assert "week of Oct 26" in shown
-    assert "2.4 h" in shown
+    assert "144 min" in shown
     assert "36 min" not in shown
 
 
 def test_each_number_says_whether_it_got_worse_or_better_than_the_week_before():
     shown = row(WEEK_BEFORE, LAST_WEEK)
 
-    assert "worse</span> than the week before (84 min)" in shown
-    assert "better</span> than the week before (13)" in shown
+    assert "worse</span> than the week before</div><div class=number-before>(84 min)</div>" in shown
+    assert "better</span> than the week before</div><div class=number-before>(13)</div>" in shown
     assert "Same as the week before" in shown
 
 
-def test_two_hours_and_more_read_in_hours():
-    assert "5.1 h" in row(WEEK_BEFORE, LAST_WEEK)
+def test_every_time_reads_in_minutes_however_long():
+    shown = row(WEEK_BEFORE, LAST_WEEK)
+
+    assert "304 min" in shown
+    assert " h<" not in shown
 
 
 def test_a_week_with_nothing_shipped_shows_a_dash_and_compares_with_nothing():
@@ -112,8 +114,8 @@ def test_the_wait_to_production_has_its_median_and_slowest_tenth_compared_with_t
     shown = row({**WEEK_BEFORE, "to_production_median_minutes": 60, "to_production_slowest_tenth_minutes": 900},
                 {**LAST_WEEK, "to_production_median_minutes": 420, "to_production_slowest_tenth_minutes": 600})
 
-    assert f"{escaped(TO_PRODUCTION_MEDIAN_WORD)}</div><div class=number-value>7.0 h" in shown
-    assert "Slowest tenth</div><div class=number-value>10.0 h" in shown
+    assert "Median time</div><div class=number-value>420 min" in shown
+    assert "Slowest tenth</div><div class=number-value>600 min" in shown
     assert "href='https://line-work.invalid/to_production_median_minutes/2026-W44'" in shown
 
 
@@ -121,6 +123,7 @@ def test_each_median_shares_a_box_with_its_slowest_tenth_and_the_two_time_boxes_
     shown = row({**WEEK_BEFORE, "to_production_median_minutes": 60}, {**LAST_WEEK, "to_production_median_minutes": 420})
 
     boxes = shown.split("<div class=number-box>")[1:]
-    names = [re.findall(r"<div class=number-name>(.*?)</div>", box) for box in boxes]
-    assert names == [[escaped(MEDIAN_WORD), "Slowest tenth"], [escaped(TO_PRODUCTION_MEDIAN_WORD), "Slowest tenth"],
-                     ["Bugs you reported"], ["App crashes"]]
+    names = [re.findall(r"<div class=(?:box|number)-name>(.*?)</div>", box) for box in boxes]
+    assert names == [["Time from acceptance to merged", "Median time", "Slowest tenth"],
+                     ["Time from merged to production", "Median time", "Slowest tenth"],
+                     ["Bugs you reported", ""], ["App crashes", ""]]
