@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from app_support.integration_runs import RunRecord, read_runs, write_run
 from app_support.win32 import process_started
+from shared_ui import tooltip_look
 from shared_ui.icons_svg import svg_icon
 
 from line import line_page, session_lifetimes
@@ -664,8 +665,14 @@ def test_only_the_window_title_says_line_and_the_chart_sits_on_the_page_with_no_
     assert "<title>Line</title>" in head
     assert not re.search(r"\bLine\b|<h\d", body)
     assert not re.search(r"&#9432;|ⓘ|title=", body)
-    painted_lighter = re.findall(r"([^{}]+)\{[^}]*background:var\(--surface\)", line_page.STYLE)
-    assert [selector.strip() for selector in painted_lighter] == ["#tip"]
+    painted = re.findall(r"([^{}]+)\{[^}]*background:rgba", line_page.STYLE)
+    assert [selector.strip() for selector in painted] == ["#tip"]
+
+
+def test_the_tip_draws_the_one_box_every_haglio_tooltip_draws():
+    tip = re.search(r"#tip \{([^}]*)\}", line_page.STYLE)[1]
+
+    assert tooltip_look.web_box() in tip
 
 
 def test_the_legend_and_the_period_buttons_share_one_row_above_the_chart_legend_first():

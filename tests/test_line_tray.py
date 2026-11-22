@@ -13,7 +13,8 @@ import pytest
 from app_support.testing import start_again_stand_in, update_waiting_for
 from PySide6.QtCore import QEvent, QLibraryInfo, Qt, QUrl
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
+from shared_ui import chrome
 from shared_ui.foreground import bring_to_front
 from shared_ui.gui_thread_collection import GuiThreadCollection
 from shared_ui.palette import MAGENTA, PREVIEW_INK
@@ -386,6 +387,15 @@ def _taskbar_identity() -> str:
 def test_lines_application_collects_cycles_on_its_gui_thread(offscreen_app):
     assert not gc.isenabled()
     assert offscreen_app.findChild(GuiThreadCollection) is not None
+
+
+def test_lines_qt_tooltips_wear_the_one_haglio_look_and_show_over_its_window_while_another_is_active(
+        offscreen_app):
+    assert chrome.tooltip_rules() in offscreen_app.styleSheet()
+    window = QWidget()
+    window.show()
+    assert window.testAttribute(Qt.WidgetAttribute.WA_AlwaysShowToolTips)
+    window.close()
 
 
 def test_the_window_gets_a_taskbar_button_of_its_own_not_one_shared_with_other_python_programs(offscreen_app):
