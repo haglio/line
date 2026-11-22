@@ -382,15 +382,11 @@ def test_the_window_gets_a_taskbar_button_of_its_own_not_one_shared_with_other_p
     assert _taskbar_identity() == "Local.Line"
 
 
-def test_the_web_view_draws_without_the_graphics_card_so_a_fault_there_cannot_take_the_tray_down(offscreen_app):
-    assert offscreen_app.arguments()[1:] == ["--webEngineArgs", "--disable-gpu", "--use-gl=angle", "--use-angle=swiftshader"]
-
-
-_A_WINDOW_THAT_LOADS_ITS_PAGE_AND_CLOSES = """
+_A_WINDOW_THAT_DRAWS_ITS_PAGE_THEN_READS_HOW_CHROMIUM_DREW_IT = """
 import os
 import sys
 from pathlib import Path
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, QUrl
 from line import line_tray
 place = Path(sys.argv[1])
 page = place / "line.html"
@@ -400,8 +396,24 @@ page.write_text("<!doctype html><title>Line</title><canvas id=c></canvas>"
 app = line_tray.application([sys.argv[0]], line_tray.this_copy(None))
 profile = line_tray.web_profile(place / "storage")
 view = line_tray.open_window(page, profile, line_tray.this_copy(None), lambda *_: None)
-view.loadFinished.connect(lambda loaded: print("loaded" if loaded else "not loaded", flush=True))
-view.loadFinished.connect(lambda _: QTimer.singleShot(3000, app.quit))
+loads = []
+def read_how_it_drew(text):
+    if text and "Display type" in text:
+        print(" ".join(text.split()), flush=True)
+        app.quit()
+    else:
+        QTimer.singleShot(200, ask_how_it_drew)
+def ask_how_it_drew():
+    view.page().runJavaScript(
+        "(document.querySelector('info-view') || {}).shadowRoot?.textContent || ''", 0, read_how_it_drew)
+def loaded(ok):
+    loads.append(ok)
+    if len(loads) == 1:
+        print("loaded" if ok else "not loaded", flush=True)
+        view.load(QUrl("chrome://gpu"))
+    else:
+        ask_how_it_drew()
+view.loadFinished.connect(loaded)
 view.show()
 QTimer.singleShot(60_000, app.quit)
 app.exec()
@@ -409,13 +421,26 @@ os._exit(0)
 """
 
 
-def test_the_web_view_writes_no_error_or_warning_into_lines_log_as_it_draws_its_page(tmp_path):
-    shown = subprocess.run([sys.executable, "-c", _A_WINDOW_THAT_LOADS_ITS_PAGE_AND_CLOSES, str(tmp_path)], check=True,
-                           env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, capture_output=True,
-                           text=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+@pytest.fixture(scope="module")
+def lines_window_drawn(tmp_path_factory):
+    return subprocess.run([sys.executable, "-c", _A_WINDOW_THAT_DRAWS_ITS_PAGE_THEN_READS_HOW_CHROMIUM_DREW_IT,
+                           str(tmp_path_factory.mktemp("drawn"))], check=True,
+                          env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, capture_output=True,
+                          text=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
-    assert shown.stdout.split() == ["loaded"], shown.stderr
-    assert [line for line in shown.stderr.splitlines() if ":ERROR:" in line or ":WARNING:" in line] == []
+
+def test_the_web_view_draws_on_windows_software_renderer_so_the_graphics_card_cannot_take_the_tray_down(
+        lines_window_drawn):
+    how_it_drew = lines_window_drawn.stdout.splitlines()[-1]
+
+    assert "Display type :ANGLE_D3D11_WARP" in how_it_drew, lines_window_drawn.stderr
+    assert "GL_RENDERER :ANGLE (Microsoft, Microsoft Basic Render Driver" in how_it_drew
+
+
+def test_the_web_view_writes_no_error_or_warning_into_lines_log_as_it_draws_its_page(lines_window_drawn):
+    assert lines_window_drawn.stdout.splitlines()[0] == "loaded", lines_window_drawn.stderr
+    assert [line for line in lines_window_drawn.stderr.splitlines() if ":ERROR:" in line or ":WARNING:" in line] == []
+    assert lines_window_drawn.stderr == ""
 
 
 STATE = line_tray.CHECKOUT / "state"
