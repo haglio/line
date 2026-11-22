@@ -32,6 +32,7 @@ from shared_ui.preview import Preview, preview_of, taskbar_identity, window_titl
 from shared_ui.preview_icon import app_icon
 
 from line import (
+    chromium_noise,
     line_page,
     page_words,
     session_lifetimes,
@@ -116,7 +117,8 @@ def the_line_he_uses() -> Path:
 
 
 def _start_line_in(checkout: Path, *flags: str, start: Callable[..., object]) -> None:
-    start([sys.executable, "-m", "line", *flags], cwd=checkout, creationflags=subprocess.CREATE_NO_WINDOW)
+    start([sys.executable, "-m", "line", *flags], cwd=checkout, creationflags=subprocess.CREATE_NO_WINDOW,
+          stderr=chromium_noise.stderr_as_started())
 
 
 def hand_back(start: Callable[..., object] = subprocess.Popen) -> None:
@@ -323,18 +325,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="line_tray")
     parser.add_argument("--open", action="store_true")
     args = parser.parse_args(argv)
+    with chromium_noise.left_out_of_stderr():
+        return _run_this_copy(open_now=args.open)
 
+
+def _run_this_copy(*, open_now: bool) -> int:
     copy = this_copy(preview_of(CHECKOUT))
     app = application(sys.argv, copy)
     if copy.preview is None:
-        if args.open:
+        if open_now:
             ctypes.windll.user32.AllowSetForegroundWindow(ASFW_ANY)
-        if ask(copy.server_name, b"open" if args.open else b""):
+        if ask(copy.server_name, b"open" if open_now else b""):
             return 0
     for name in copy.copies_it_replaces:
         if ask(name, b"quit"):
             wait_until_gone(name)
-    return run_the_tray(app, copy, open_now=args.open)
+    return run_the_tray(app, copy, open_now=open_now)
 
 
 def _open_in_its_app(link: str) -> None:
