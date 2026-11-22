@@ -22,12 +22,12 @@ from app_support.integration_runs import (
     RunRecord,
     kind_of,
 )
+from shared_ui import tooltip_look
 from shared_ui.icons_svg import svg_icon
 from shared_ui.palette import (
     BG_KEYCAP,
     BG_PRIMARY,
     BG_SECONDARY,
-    BLACK,
     BLUE,
     BORDER_DEFAULT,
     GREEN,
@@ -491,10 +491,10 @@ def _charts_with_their_legend_and_periods(runs: list[Run], line: list[Run], now:
 
 DARK_BACKGROUND = as_hex(BG_PRIMARY)
 STYLE = f"""
-:root {{ --bg:{DARK_BACKGROUND}; --surface:{as_hex(BG_PRIMARY)}; --ink:{as_hex(WHITE)}; --ink2:{as_hex(BORDER_DEFAULT)};
+:root {{ --bg:{DARK_BACKGROUND}; --ink:{as_hex(WHITE)}; --ink2:{as_hex(BORDER_DEFAULT)};
   --muted:{as_hex(TEXT_MUTED)}; --waiting:{as_hex(BG_KEYCAP)}; --grid:{as_hex(BG_SECONDARY)};
   --border:{as_rgba(WHITE, 0.1)}; --passed:{as_hex(GREEN)}; --failed:{as_hex(RED)}; --noresult:{as_hex(YELLOW)};
-  --going:{as_hex(BLUE)}; --pressed:{as_hex(BG_SECONDARY)}; --shadow:{as_rgba(BLACK, 0.15)};
+  --going:{as_hex(BLUE)}; --pressed:{as_hex(BG_SECONDARY)};
   --unit:.95px; color-scheme:dark }}
 .key-color {{ display:inline-block; width:calc({KEY_W} * var(--unit)); height:calc({RAN_H} * var(--unit));
   border-radius:calc({RAN_RX} * var(--unit)) }}
@@ -537,10 +537,8 @@ main {{ max-width:1140px; margin:0 auto }}
 .key-color.passed {{ background:var(--passed) }} .key-color.failed {{ background:var(--failed) }}
 .key-color.no-result {{ background:var(--noresult) }} .key-color.going {{ background:var(--going) }}
 pattern .dot {{ fill:var(--muted) }}
-#tip {{ position:fixed; z-index:2; pointer-events:none; background:var(--surface); color:var(--ink);
-  border:1px solid var(--border); border-radius:{BUTTON_RADIUS}px; padding:{GAP_MEDIUM}px;
-  font-size:{in_pixels(SIZE_SMALL)}px; box-shadow:0 4px 14px var(--shadow); display:none; max-width:320px }}
-#tip strong {{ display:block; font-size:{in_pixels(SIZE_SMALL)}px }}
+#tip {{ position:fixed; z-index:2; pointer-events:none; {tooltip_look.web_box()}; display:none; max-width:320px }}
+#tip strong {{ display:block }}
 """
 
 SCRIPT = """
