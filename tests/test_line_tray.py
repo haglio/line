@@ -19,7 +19,7 @@ from shared_ui.gui_thread_collection import GuiThreadCollection
 from shared_ui.palette import MAGENTA, PREVIEW_INK
 from shared_ui.preview import Preview
 
-from line import line_page, line_tray
+from line import chromium_noise, line_page, line_tray
 
 
 @pytest.fixture(scope="module")
@@ -282,7 +282,17 @@ def test_the_fresh_copy_runs_this_program_on_the_same_python_opening_its_window_
     line_tray.start_a_fresh_copy(lambda command, **options: started.append((command, options)))
 
     assert started == [([sys.executable, "-m", "line", "--open"],
-                        {"cwd": line_tray.CHECKOUT, "creationflags": subprocess.CREATE_NO_WINDOW})]
+                        {"cwd": line_tray.CHECKOUT, "creationflags": subprocess.CREATE_NO_WINDOW, "stderr": None})]
+
+
+def test_a_copy_of_line_started_while_chromiums_noise_is_left_out_writes_where_this_copy_was_started_to(capfd):
+    started = []
+
+    with chromium_noise.left_out_of_stderr():
+        line_tray.start_a_fresh_copy(lambda _command, **options: started.append(options["stderr"]))
+        os.write(started[0], b"a line of the fresh copy\n")
+
+    assert capfd.readouterr().err == "a line of the fresh copy\n"
 
 
 def test_the_window_is_titled_line_wears_its_icon_and_is_dark_before_its_page_loads(offscreen_app, tmp_path):
@@ -555,7 +565,8 @@ def test_handing_back_starts_the_line_he_uses_in_the_tray_with_no_console():
     line_tray.hand_back(lambda command, **options: started.append((command, options)))
 
     assert started == [([sys.executable, "-m", "line"],
-                        {"cwd": line_tray.the_line_he_uses(), "creationflags": subprocess.CREATE_NO_WINDOW})]
+                        {"cwd": line_tray.the_line_he_uses(), "creationflags": subprocess.CREATE_NO_WINDOW,
+                         "stderr": None})]
 
 
 def test_the_line_he_uses_runs_from_the_checkout_every_worktree_of_this_one_belongs_to():
