@@ -47,6 +47,9 @@ Sub Launch()
   End If
   CatchUp
   HoldGates
+  On Error Resume Next
+  shell.Environment("Process").Remove "PYTHONPATH"
+  On Error GoTo 0
   logPath = FreeLog(logPath)
   Note logPath, "===== " & Now & " launch: " & Command()
   shell.Run Command(), 0, False
