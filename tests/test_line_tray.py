@@ -398,7 +398,7 @@ import sys
 from pathlib import Path
 from PySide6.QtCore import QTimer, QUrl
 from line import line_tray
-place = Path(sys.argv[1])
+place, DRAWN = Path(sys.argv[1]), sys.argv[2]
 page = place / "line.html"
 page.write_text("<!doctype html><title>Line</title><canvas id=c></canvas>"
                 "<script>document.getElementById('c').getContext('2d').fillRect(0, 0, 9, 9)</script>",
@@ -416,11 +416,14 @@ def read_how_it_drew(text):
 def ask_how_it_drew():
     view.page().runJavaScript(
         "(document.querySelector('info-view') || {}).shadowRoot?.textContent || ''", 0, read_how_it_drew)
+def read_chromiums_own_page():
+    print(DRAWN, file=sys.stderr, flush=True)
+    view.load(QUrl("chrome://gpu"))
 def loaded(ok):
     loads.append(ok)
     if len(loads) == 1:
         print("loaded" if ok else "not loaded", flush=True)
-        view.load(QUrl("chrome://gpu"))
+        QTimer.singleShot(3000, read_chromiums_own_page)
     else:
         ask_how_it_drew()
 view.loadFinished.connect(loaded)
@@ -431,10 +434,13 @@ os._exit(0)
 """
 
 
+_LINES_PAGE_DRAWN = "the test now leaves Line's page for chrome://gpu"
+
+
 @pytest.fixture(scope="module")
 def lines_window_drawn(tmp_path_factory):
     return subprocess.run([sys.executable, "-c", _A_WINDOW_THAT_DRAWS_ITS_PAGE_THEN_READS_HOW_CHROMIUM_DREW_IT,
-                           str(tmp_path_factory.mktemp("drawn"))], check=True,
+                           str(tmp_path_factory.mktemp("drawn")), _LINES_PAGE_DRAWN], check=True,
                           env={**os.environ, "QT_QPA_PLATFORM": "offscreen"}, capture_output=True,
                           text=True, timeout=120, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
 
@@ -447,10 +453,11 @@ def test_the_web_view_draws_on_windows_software_renderer_so_the_graphics_card_ca
     assert "GL_RENDERER :ANGLE (Microsoft, Microsoft Basic Render Driver" in how_it_drew
 
 
-def test_the_web_view_writes_no_error_or_warning_into_lines_log_as_it_draws_its_page(lines_window_drawn):
+def test_the_web_view_writes_nothing_into_lines_log_as_it_draws_its_page(lines_window_drawn):
+    written_while_lines_page_showed = lines_window_drawn.stderr.partition(_LINES_PAGE_DRAWN)[0]
+
     assert lines_window_drawn.stdout.splitlines()[0] == "loaded", lines_window_drawn.stderr
-    assert [line for line in lines_window_drawn.stderr.splitlines() if ":ERROR:" in line or ":WARNING:" in line] == []
-    assert lines_window_drawn.stderr == ""
+    assert written_while_lines_page_showed == ""
 
 
 STATE = line_tray.CHECKOUT / "state"
