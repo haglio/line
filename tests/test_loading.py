@@ -2,8 +2,10 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
+from shared_ui.preview import Preview
 from shared_ui.testing import loading_process_opened
 
 from line import line_tray
@@ -68,4 +70,17 @@ def test_the_loading_screen_runs_in_a_process_of_its_own_wearing_lines_taskbar_b
 
     opened.assert_called_once_with(
         caption="Line loading", wordmark="Line", icon=line_tray.ICON, preview=None, steps=line_tray.STEPS,
-        cancel_hint="Press Esc to cancel opening Line", app_id=copy.app_user_model_id)
+        cancel_hint="Press Esc to cancel opening Line", app_id=copy.app_user_model_id, taskbar=None)
+
+
+def test_a_previews_loading_screen_wears_the_yellow_l_on_its_taskbar_button(tmp_path):
+    copy = replace(line_tray.this_copy(Preview("the example")), state=tmp_path)
+
+    with loading_process_opened() as opened:
+        line_tray.open_the_loading_screen(copy)
+
+    taskbar = opened.call_args.kwargs["taskbar"]
+    assert taskbar.name == copy.title
+    assert taskbar.icon == tmp_path / "preview_icon.ico"
+    assert taskbar.icon.is_file()
+    assert taskbar.relaunch == f'wscript.exe "{line_tray.CHECKOUT / "launch_preview_branch.vbs"}"'

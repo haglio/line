@@ -17,7 +17,7 @@ from app_support import production_update
 from app_support.logging_utils import configure_logging, install_exception_logging
 from app_support.siblings import primary_checkout_of
 from app_support.subprocess_utils import hidden_subprocess_kwargs
-from app_support.win32 import set_app_user_model_id
+from app_support.win32 import TaskbarApp, set_app_user_model_id
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QColor, QDesktopServices, QIcon
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
@@ -31,6 +31,7 @@ from shared_ui.gui_thread_collection import the_application
 from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
 from shared_ui.preview_icon import app_icon
+from shared_ui.preview_icon_pil import icon_file
 from shared_ui.tooltip_reach import dress_tooltips
 
 from line import (
@@ -98,6 +99,12 @@ class LineCopy:
 
     def icon(self) -> QIcon:
         return app_icon(ICON, self.preview)
+
+    def taskbar_app(self) -> TaskbarApp | None:
+        if self.preview is None:
+            return None
+        return TaskbarApp(name=self.title, icon=icon_file(ICON, self.preview, self.state),
+                          relaunch=f'wscript.exe "{CHECKOUT / "launch_preview_branch.vbs"}"')
 
 
 def this_copy(preview: Preview | None) -> LineCopy:
@@ -322,7 +329,8 @@ def open_the_loading_screen(copy: LineCopy):
 
     return LoadingProcess.open(
         caption="Line loading", wordmark="Line", icon=ICON, preview=copy.preview, steps=STEPS,
-        cancel_hint="Press Esc to cancel opening Line", app_id=copy.app_user_model_id)
+        cancel_hint="Press Esc to cancel opening Line", app_id=copy.app_user_model_id,
+        taskbar=copy.taskbar_app())
 
 
 def main(argv: list[str] | None = None) -> int:
