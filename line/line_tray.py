@@ -31,7 +31,7 @@ from shared_ui.gui_thread_collection import the_application
 from shared_ui.loading_window import Loading, LoadingCanceled
 from shared_ui.preview import Preview, preview_of, taskbar_identity, window_title
 from shared_ui.preview_icon import app_icon
-from shared_ui.preview_icon_pil import icon_file
+from shared_ui.preview_taskbar import preview_on_the_taskbar
 from shared_ui.tooltip_reach import dress_tooltips
 
 from line import (
@@ -101,10 +101,7 @@ class LineCopy:
         return app_icon(ICON, self.preview)
 
     def taskbar_app(self) -> TaskbarApp | None:
-        if self.preview is None:
-            return None
-        return TaskbarApp(name=self.title, icon=icon_file(ICON, self.preview, self.state),
-                          relaunch=f'wscript.exe "{CHECKOUT / "launch_preview_branch.vbs"}"')
+        return preview_on_the_taskbar(line_page.APP_NAME, ICON, self.preview, CHECKOUT, self.state)
 
 
 def this_copy(preview: Preview | None) -> LineCopy:
