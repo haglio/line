@@ -304,16 +304,27 @@ def _ms(when: datetime) -> int:
     return int(when.timestamp() * 1000)
 
 
-def test_the_claude_apps_records_say_when_each_session_was_spawned_and_whether_it_is_archived(tmp_path):
-    account = tmp_path / "Claude_x" / "LocalCache" / "Roaming" / "Claude" / "claude-code-sessions" / "org" / "me"
+@pytest.fixture
+def claude_app_data(tmp_path, monkeypatch) -> Path:
+    local = tmp_path / "local app data"
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    monkeypatch.setenv("APPDATA", str(tmp_path / "roaming app data"))
+    return local
+
+
+def _sessions_kept_in(data_folder: Path) -> Path:
+    return data_folder / "claude-code-sessions" / "org" / "me"
+
+
+def test_the_claude_apps_records_say_when_each_session_was_spawned_and_whether_it_is_archived(claude_app_data):
+    account = _sessions_kept_in(claude_app_data / "Packages" / "Claude_x" / "LocalCache" / "Roaming" / "Claude")
     _app_session(account, "local_one", cliSessionId="5e55-10n", priorCliSessionIds=["5e55-0ld"],
                  createdAt=_ms(minute(0)), lastActivityAt=_ms(minute(40)), isArchived=True)
     _app_session(account, "local_two", cliSessionId="0pen-5e5", createdAt=_ms(minute(5)),
                  lastActivityAt=_ms(minute(50)), isArchived=False)
     (account / "local_torn.json").write_text("{", encoding="utf-8")
 
-    sessions = sorted(session_lifetimes.app_sessions([(tmp_path, session_lifetimes.CLAUDE_APP_SESSIONS[0][1])]),
-                      key=lambda session: session.app_id)
+    sessions = sorted(session_lifetimes.app_sessions(), key=lambda session: session.app_id)
 
     assert sessions == [
         session_lifetimes.AppSession("local_one", ("5e55-10n", "5e55-0ld"), minute(0), True, minute(40)),
@@ -321,15 +332,23 @@ def test_the_claude_apps_records_say_when_each_session_was_spawned_and_whether_i
     ]
 
 
-def test_a_session_kept_in_two_places_is_read_from_the_first_place_the_app_keeps_sessions(tmp_path):
-    packaged, plain = tmp_path / "packaged" / "org" / "me", tmp_path / "plain" / "org" / "me"
+def test_the_sessions_of_every_claude_window_are_read(claude_app_data):
+    _app_session(_sessions_kept_in(claude_app_data / "Claude-Data" / "claude_x"), "local_one",
+                 cliSessionId="5e55-10n", createdAt=_ms(minute(0)), lastActivityAt=_ms(minute(10)))
+    _app_session(_sessions_kept_in(claude_app_data / "ClaudeProfileB"), "local_two",
+                 cliSessionId="0pen-5e5", createdAt=_ms(minute(5)), lastActivityAt=_ms(minute(20)))
+
+    assert sorted(session.app_id for session in session_lifetimes.app_sessions()) == ["local_one", "local_two"]
+
+
+def test_a_session_kept_in_two_places_is_read_from_the_copy_the_app_wrote_last(claude_app_data, tmp_path):
+    packaged = _sessions_kept_in(claude_app_data / "Packages" / "Claude_x" / "LocalCache" / "Roaming" / "Claude")
     _app_session(packaged, "local_one", cliSessionId="5e55-10n", createdAt=_ms(minute(0)),
                  lastActivityAt=_ms(minute(40)), isArchived=True)
-    _app_session(plain, "local_one", cliSessionId="5e55-10n", createdAt=_ms(minute(0)),
-                 lastActivityAt=_ms(minute(10)), isArchived=False)
+    _app_session(_sessions_kept_in(tmp_path / "roaming app data" / "Claude"), "local_one", cliSessionId="5e55-10n",
+                 createdAt=_ms(minute(0)), lastActivityAt=_ms(minute(10)), isArchived=False)
 
-    [session] = session_lifetimes.app_sessions([(tmp_path / "packaged", "*/*/local_*.json"),
-                                        (tmp_path / "plain", "*/*/local_*.json")])
+    [session] = session_lifetimes.app_sessions()
 
     assert (session.archived, session.last_active) == (True, minute(40))
 

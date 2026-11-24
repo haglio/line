@@ -1,25 +1,18 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from app_support.file_channel import write_whole
+from shared_ui.claude_desktop_sessions import session_records
 
 
 @dataclass(frozen=True)
 class Lifetime:
     spawned: datetime
     archived: datetime | None
-
-
-CLAUDE_APP_SESSIONS = (
-    (Path.home() / "AppData" / "Local" / "Packages",
-     "Claude_*/LocalCache/Roaming/Claude/claude-code-sessions/*/*/local_*.json"),
-    (Path.home() / "AppData" / "Roaming" / "Claude" / "claude-code-sessions", "*/*/local_*.json"),
-)
 
 
 @dataclass(frozen=True)
@@ -35,18 +28,19 @@ def _from_ms(ms: int) -> datetime:
     return datetime.fromtimestamp(ms / 1000, UTC)
 
 
-def app_sessions(places: Iterable[tuple[Path, str]] = CLAUDE_APP_SESSIONS) -> list[AppSession]:
+def app_sessions() -> list[AppSession]:
     sessions: dict[str, AppSession] = {}
-    for root, pattern in places:
-        for path in root.glob(pattern):
-            try:
-                record = json.loads(path.read_text(encoding="utf-8"))
-                ids = tuple(filter(None, [record.get("cliSessionId"), *record.get("priorCliSessionIds", [])]))
-                session = AppSession(record["sessionId"], ids, _from_ms(record["createdAt"]),
-                                     bool(record.get("isArchived")), _from_ms(record["lastActivityAt"]))
-            except (OSError, ValueError, KeyError, TypeError):
-                continue
-            sessions.setdefault(session.app_id, session)
+    for path in session_records():
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+            ids = tuple(filter(None, [record.get("cliSessionId"), *record.get("priorCliSessionIds", [])]))
+            session = AppSession(record["sessionId"], ids, _from_ms(record["createdAt"]),
+                                 bool(record.get("isArchived")), _from_ms(record["lastActivityAt"]))
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        copy_seen = sessions.get(session.app_id)
+        if copy_seen is None or session.last_active > copy_seen.last_active:
+            sessions[session.app_id] = session
     return list(sessions.values())
 
 
